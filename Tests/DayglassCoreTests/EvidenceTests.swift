@@ -40,7 +40,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         var values: [[String: Any]] = []
         let formatter = ISO8601DateFormatter()
-        let start = try #require(formatter.date(from: "2026-09-01T15:00:00Z"))
+        formatter.timeZone = DayglassCalendar.local.timeZone
+        let start = DayglassCalendar.local.startOfDay(for: try day("2026-09-02"))
         for hour in 0..<24 {
             let user = formatter.string(from: start.addingTimeInterval(Double(hour) * 3_600))
             let result = formatter.string(from: start.addingTimeInterval(Double(hour) * 3_600 + 60))
