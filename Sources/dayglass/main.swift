@@ -78,6 +78,7 @@ func run() throws {
     case "serve": try TelemetryServer(dataRoot: defaultDataRoot).run()
     case "sync": try sync(options)
     case "evidence": try evidence(options)
+    case "setup": try setup(options)
     default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(helpText)")
     }
 }
@@ -204,6 +205,11 @@ func evidence(_ options: CLIOptions) throws {
     print(result.text, terminator: "")
 }
 
+func setup(_ options: CLIOptions) throws {
+    let mode = try SetupCoordinator.Mode(rawValue: options.positionals.first ?? "all") ?? { throw DayglassCLIError.usage("setup accepts hooks, telemetry, or no argument") }()
+    try SetupCoordinator(dataRoot: defaultDataRoot).run(mode: mode)
+}
+
 func loadResult(month: String) throws -> ReportResult {
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(month: month)
     let configurationURL = FileManager.default.homeDirectoryForCurrentUser
@@ -280,6 +286,7 @@ Commands:
   serve
   sync github
   evidence [--day YYYY-MM-DD] [--max-chars N]
+  setup [hooks|telemetry]
   reap [--days N]
 """
 
