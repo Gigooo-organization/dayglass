@@ -223,6 +223,71 @@ public struct ReportBlock: Codable, Equatable, Sendable {
     }
 }
 
+public struct ReportAIRow: Codable, Equatable, Sendable {
+    public let day: String
+    public let project: String?
+    public let agent: String
+    public let sessions: Int
+    public let turns: Int
+    public let editTurns: Int
+    public let inputUncached: Int
+    public let cacheRead: Int
+    public let cacheWrite: Int
+    public let output: Int
+
+    public init(
+        day: String,
+        project: String?,
+        agent: String,
+        sessions: Int,
+        turns: Int,
+        editTurns: Int,
+        inputUncached: Int,
+        cacheRead: Int,
+        cacheWrite: Int,
+        output: Int
+    ) {
+        self.day = day
+        self.project = project
+        self.agent = agent
+        self.sessions = sessions
+        self.turns = turns
+        self.editTurns = editTurns
+        self.inputUncached = inputUncached
+        self.cacheRead = cacheRead
+        self.cacheWrite = cacheWrite
+        self.output = output
+    }
+}
+
+public struct ReportOutputRow: Codable, Equatable, Sendable {
+    public let day: String
+    public let project: String?
+    public let commits: Int
+    public let changedLines: Int
+    public let createdPRs: Int
+    public let mergedPRs: Int
+    public let reviewedPRs: Int
+
+    public init(
+        day: String,
+        project: String?,
+        commits: Int = 0,
+        changedLines: Int = 0,
+        createdPRs: Int = 0,
+        mergedPRs: Int = 0,
+        reviewedPRs: Int = 0
+    ) {
+        self.day = day
+        self.project = project
+        self.commits = commits
+        self.changedLines = changedLines
+        self.createdPRs = createdPRs
+        self.mergedPRs = mergedPRs
+        self.reviewedPRs = reviewedPRs
+    }
+}
+
 public struct ReportQuestion: Codable, Equatable, Sendable {
     public let id: String
     public let kind: String
@@ -253,11 +318,21 @@ public struct ReportQuestion: Codable, Equatable, Sendable {
 
 public struct ReportResult: Codable, Equatable, Sendable {
     public let time: [ReportTimeRow]
+    public let ai: [ReportAIRow]
+    public let output: [ReportOutputRow]
     public let blocks: [ReportBlock]
     public let questions: [ReportQuestion]
 
-    public init(time: [ReportTimeRow], blocks: [ReportBlock], questions: [ReportQuestion]) {
+    public init(
+        time: [ReportTimeRow],
+        ai: [ReportAIRow] = [],
+        output: [ReportOutputRow] = [],
+        blocks: [ReportBlock],
+        questions: [ReportQuestion]
+    ) {
         self.time = time
+        self.ai = ai
+        self.output = output
         self.blocks = blocks
         self.questions = questions
     }

@@ -80,7 +80,13 @@ public struct ReportEngine: Sendable {
             activeWindow: activeWindow,
             focus: focus
         )
-        return ReportResult(time: rows, blocks: blocks, questions: questions)
+        return ReportResult(
+            time: rows,
+            ai: makeAIRows(turns: turns, sessions: sessions),
+            output: makeOutputRows(logs: input.logs),
+            blocks: blocks,
+            questions: questions
+        )
     }
 
     private func makeCandidate(
@@ -141,6 +147,13 @@ public struct ReportEngine: Sendable {
         let app = (focus.attributes["app.name"] ?? "").lowercased()
         let domain = (focus.attributes["url.domain"] ?? "").lowercased()
         let path = (focus.attributes["url.path"] ?? "").lowercased()
+
+        for rule in configuration.categories where
+            rule.bundles.contains(where: { wildcard($0.lowercased(), matches: bundle.lowercased()) }) ||
+            rule.domains.contains(where: { wildcard($0.lowercased(), matches: domain) }) ||
+            rule.paths.contains(where: { path.contains($0.lowercased()) }) {
+            return CategoryAssignment(category: rule.category, basis: domain.isEmpty ? "bundle" : "url")
+        }
 
         if isMeetingApp(app: app, bundle: bundle) || domain == "meet.google.com" || domain == "teams.microsoft.com" || domain.hasSuffix(".zoom.us") {
             return CategoryAssignment(category: .meeting, basis: domain.isEmpty ? "bundle" : "url")
@@ -205,6 +218,72 @@ public struct ReportEngine: Sendable {
         }
     }
 
+    private func makeAIRows(turns: [ObservedSpan], sessions: [ObservedSpan]) -> [ReportAIRow] {
+        struct Key: Hashable { let day: String; let project: String?; let agent: String }
+        var values: [Key: (sessions: Set<String>, turns: Int, edits: Int, input: Int, read: Int, write: Int, output: Int)] = [:]
+        for turn in turns {
+            let agent = turn.attributes["gen_ai.agent.name"] ?? "unknown"
+            let overlappingSessions = sessions.filter { $0.end > turn.start && $0.start < turn.end }
+            let projects = Set(overlappingSessions.compactMap { $0.attributes["dayglass.project"] })
+            let project = projects.count == 1 ? projects.first : turn.attributes["dayglass.project"]
+            let key = Key(day: dayString(turn.start), project: project, agent: agent)
+            let existing = values[key] ?? (sessions: [], turns: 0, edits: 0, input: 0, read: 0, write: 0, output: 0)
+            var updated = existing
+            updated.turns += 1
+            updated.edits += Int(turn.attributes["dayglass.edit_calls"] ?? "0") ?? 0 > 0 ? 1 : 0
+            updated.input += integerAttribute(turn, names: ["gen_ai.usage.input_uncached", "input_uncached"])
+            updated.read += integerAttribute(turn, names: ["gen_ai.usage.cache_read_tokens", "cache_read_tokens"])
+            updated.write += integerAttribute(turn, names: ["gen_ai.usage.cache_creation_tokens", "cache_write_tokens", "cache_write_token_count"])
+            updated.output += integerAttribute(turn, names: ["gen_ai.usage.output_tokens", "output_tokens", "output_token_count"])
+            for session in overlappingSessions { updated.sessions.insert(session.attributes["gen_ai.conversation.id"] ?? session.start.description) }
+            values[key] = updated
+        }
+        for session in sessions where !turns.contains(where: { $0.end > session.start && $0.start < session.end }) {
+            let agent = session.attributes["gen_ai.agent.name"] ?? "unknown"
+            let key = Key(day: dayString(session.start), project: session.attributes["dayglass.project"], agent: agent)
+            var existing = values[key] ?? (sessions: [], turns: 0, edits: 0, input: 0, read: 0, write: 0, output: 0)
+            existing.sessions.insert(session.attributes["gen_ai.conversation.id"] ?? session.start.description)
+            values[key] = existing
+        }
+        return values.map { key, value in
+            ReportAIRow(
+                day: key.day,
+                project: key.project,
+                agent: key.agent,
+                sessions: value.sessions.count,
+                turns: value.turns,
+                editTurns: value.edits,
+                inputUncached: value.input,
+                cacheRead: value.read,
+                cacheWrite: value.write,
+                output: value.output
+            )
+        }.sorted { "\($0.day)|\($0.project ?? "")|\($0.agent)" < "\($1.day)|\($1.project ?? "")|\($1.agent)" }
+    }
+
+    private func makeOutputRows(logs: [ObservedLog]) -> [ReportOutputRow] {
+        struct Key: Hashable { let day: String; let project: String? }
+        var values: [Key: ReportOutputRow] = [:]
+        for log in logs where log.name == "github.event" {
+            let key = Key(day: dayString(log.timestamp), project: log.attributes["dayglass.project"])
+            var row = values[key] ?? ReportOutputRow(day: key.day, project: key.project)
+            let type = log.attributes["github.event.type"] ?? log.attributes["type"] ?? ""
+            let action = log.attributes["github.event.action"] ?? log.attributes["action"] ?? ""
+            let isPullRequest = type == "PullRequestEvent" || type == "PullRequestReviewEvent"
+            row = ReportOutputRow(
+                day: row.day,
+                project: row.project,
+                commits: row.commits + (type == "PushEvent" ? 1 : 0),
+                changedLines: row.changedLines + (Int(log.attributes["changed_lines"] ?? "0") ?? 0),
+                createdPRs: row.createdPRs + (isPullRequest && action == "opened" ? 1 : 0),
+                mergedPRs: row.mergedPRs + (isPullRequest && action == "closed" && log.attributes["merged"] == "true" ? 1 : 0),
+                reviewedPRs: row.reviewedPRs + (type == "PullRequestReviewEvent" ? 1 : 0)
+            )
+            values[key] = row
+        }
+        return values.values.sorted { "\($0.day)|\($0.project ?? "")" < "\($1.day)|\($1.project ?? "")" }
+    }
+
     private func makeQuestions(
         candidates: [Candidate],
         blocks: [ReportBlock],
@@ -266,6 +345,13 @@ public struct ReportEngine: Sendable {
         let parts = configuration.calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
     }
+}
+
+private func integerAttribute(_ span: ObservedSpan, names: [String]) -> Int {
+    for name in names where span.attributes[name] != nil {
+        return Int(span.attributes[name]!) ?? 0
+    }
+    return 0
 }
 
 private struct Candidate: Sendable {
