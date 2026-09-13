@@ -4,7 +4,7 @@ public struct ObservationStore: Sendable {
     private let root: URL
     private var calendar: Calendar
 
-    public init(root: URL, calendar: Calendar = .current) {
+    public init(root: URL, calendar: Calendar = DayglassCalendar.local) {
         self.root = root
         self.calendar = calendar
     }

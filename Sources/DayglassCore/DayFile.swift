@@ -12,7 +12,7 @@ public final class DayFile: @unchecked Sendable {
     private var calendar: Calendar
     private let fileManager = FileManager.default
 
-    public init(root: URL, calendar: Calendar = .current) {
+    public init(root: URL, calendar: Calendar = DayglassCalendar.local) {
         self.root = root
         self.calendar = calendar
     }

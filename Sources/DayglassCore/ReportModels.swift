@@ -115,7 +115,7 @@ public struct ReportConfiguration: Sendable {
         projects: [ProjectRule] = [],
         categories: [CategoryRule] = [],
         thresholds: ReportThresholds = ReportThresholds(),
-        calendar: Calendar = .current
+        calendar: Calendar = DayglassCalendar.local
     ) {
         self.projects = projects
         self.categories = categories

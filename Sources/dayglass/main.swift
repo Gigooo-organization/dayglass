@@ -189,18 +189,18 @@ func write(_ value: String, to url: URL) throws {
 }
 
 func monthString(_ date: Date) -> String {
-    let components = Calendar.current.dateComponents([.year, .month], from: date)
+    let components = DayglassCalendar.local.dateComponents([.year, .month], from: date)
     return String(format: "%04d-%02d", components.year!, components.month!)
 }
 
 func dayString(_ date: Date) -> String {
-    let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+    let components = DayglassCalendar.local.dateComponents([.year, .month, .day], from: date)
     return String(format: "%04d-%02d-%02d", components.year!, components.month!, components.day!)
 }
 
 func parseDay(_ value: String) throws -> Date {
     let formatter = DateFormatter()
-    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.calendar = DayglassCalendar.local
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.timeZone = .current
     formatter.dateFormat = "yyyy-MM-dd"
@@ -213,7 +213,7 @@ func parseClock(_ value: String, on day: Date) throws -> Date {
     guard fields.count == 2, fields[0] >= 0, fields[0] < 24, fields[1] >= 0, fields[1] < 60 else {
         throw DayglassCLIError.message("invalid time: \(value)")
     }
-    return Calendar.current.date(bySettingHour: fields[0], minute: fields[1], second: 0, of: day)!
+    return DayglassCalendar.local.date(bySettingHour: fields[0], minute: fields[1], second: 0, of: day)!
 }
 
 let helpText = """

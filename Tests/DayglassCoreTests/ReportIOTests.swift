@@ -45,6 +45,17 @@ import Testing
         #expect(!json.contains("private window title"))
         #expect(json.contains("PJ-A"))
     }
+
+    @Test func localDatesUseTheGregorianYearEvenWhenTheSystemCalendarDiffers() {
+        let components = DayglassCalendar.local.dateComponents(
+            [.year, .month, .day],
+            from: date("2026-09-14T00:00:00Z")
+        )
+
+        #expect(components.year == 2026)
+        #expect(components.month == 9)
+        #expect(components.day == 14)
+    }
 }
 
 private func date(_ value: String) -> Date {
