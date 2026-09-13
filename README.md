@@ -1,24 +1,24 @@
 # dayglass
 
-Apple Silicon Mac 向けのローカル工数素材・集計ツールです。前面アプリや AI セッションなどの観測値を素材として保存し、ルールベースの推定と人間の確認を分けて管理します。
+Apple Silicon Mac 向けのローカル完結型・工数記録および集計ツールです。フォアグラウンドのアプリケーション操作や AI セッションなどの客観的な観測データを「工数の素材」として収集・保存し、ルールベースによる自動推定と人間による対話的な確認（確定）を明確に分離して管理します。
 
 ## Privacy
 
-ローカルに記録するもの:
+ローカル環境にのみ記録・保持するもの:
 
-- 前面アプリ、ウィンドウタイトル、許可ホストの URL パス、入力アイドル・一時停止
-- Claude Code / Codex のセッション・ターン境界とトークン集計値
-- `Gigooo-organization/` 配下の GitHub 活動種別・日時・PR 番号
+- フォアグラウンドアプリ、ウィンドウタイトル、許可ホストの URL パス、入力アイドル時間、画面ロック・スリープ状態
+- Claude Code / Codex のセッションおよびターンの開始・終了境界、トークン集計値
+- `Gigooo-organization/` 配下リポジトリの GitHub アクティビティ種別、日時、PR 番号
 
 記録しないもの:
 
-- 打鍵、クリック、選択テキスト、AX ツリー、スクリーンショット
-- OTLP のプロンプト本文、応答本文、ツール引数・実行結果、URL の query / fragment
-- 許可されていないホストの URL パス、コミットメッセージ、PR レビュー本文
+- 打鍵内容、クリック位置、選択テキスト、Accessibility（AX）ツリー、スクリーンショット
+- OTLP 経由のプロンプト本文、応答本文、ツール引数・実行結果、URL のクエリパラメータおよびフラグメント
+- 許可ホスト以外の URL パス、コミットメッセージ本文、PR レビュー本文
 
-生ログは `~/Library/Application Support/dayglass/otlp/YYYY-MM-DD/` に留まります。dayglass 自身が外部へ送信するのは、`gh` 経由の GitHub 読み取りだけです。管理部への提出は `report --freeze` の生成物を人間が確認して手動で行います。
+収集された生ログはローカル環境（`~/Library/Application Support/dayglass/otlp/YYYY-MM-DD/`）にのみ保存され、外部サーバへ直接送信されることはありません。dayglass 自体が行う外部通信は、`gh` コマンドを経由した GitHub データの読み取りのみです。管理部への提出は、`report --freeze` により生成された集計ファイルを人間が内容確認した上で、手動で提出します。
 
-`evidence` はローカルのトランスクリプトから、伏字・文字数上限・合成入力除外を適用した作業抜粋を作ります。Claude Code / Codex の skill で利用する場合、その `report`、質問、伏字済み evidence はエージェントのモデル API に入力され得ます。生ログとトランスクリプト全文は skill に渡しません。
+`evidence` コマンドは、ローカルのトランスクリプトからマスキング（伏字）、文字数上限、システム合成入力の除外を適用した安全な作業抜粋を生成します。Claude Code や Codex の skill を利用して対話形式で確認を行う場合、生成された `report`、未確定事項の質問、マスキング済み evidence はエージェント経由でモデル API（クラウド）へ入力として渡されます。なお、生ログやトランスクリプトの全文が skill に渡されることはありません。
 
 ## Install
 
@@ -28,9 +28,11 @@ brew install gigooo-organization/dayglass/dayglass
 dayglass setup
 ```
 
-ソースビルドの formula で、`gh` を依存します。`dayglass setup` は既存設定を JSON として読み、Claude Code / Codex の hooks と OTel 設定を必要な分だけ追記し、source ID、`projects.toml`、skill、launchd plist を作成します。既存の設定形式が壊れている場合は上書きせず停止します。
+Homebrew の仕様上、非公式 tap の利用には明示的な信頼設定が必要となるため、あらかじめ `brew trust` で formula を信頼した上でインストールします。ローカルでコンパイルするソースビルド形式の formula であり、依存関係として `gh`（GitHub CLI）が必要です。
 
-daemon の利用には System Settings の Accessibility 許可が必要です。個人ビルドは `~/.local/libexec/dayglass` の固定パスへ置くため、更新時は Accessibility 許可の再確認が必要です。Keychain Access で同じ名前の自己署名 Code Signing identity を作り、固定パスのバイナリを毎回同じ identity で署名すると再許可の負担を抑えられます。
+`dayglass setup` コマンドを実行すると、既存の設定ファイルを保持しながら Claude Code / Codex 向けの hooks および OTel 設定を自動で追記し、端末固有の source ID、`projects.toml`（プロジェクト定義）、skill、launchd 向け plist ファイルを一括生成します。なお、既存の設定ファイルが破損している場合は、意図しない上書きを防ぐため処理を安全に中断します。
+
+フォアグラウンドアプリの監視（daemon）を利用するには、macOS の「システム設定 > プライバシーとセキュリティ > アクセシビリティ」での実行許可が必要です。Developer ID を用いない個人ビルドではバイナリを `~/.local/libexec/dayglass` の固定パスに配置するため、バイナリ更新のたびにアクセシビリティ権限の再許可が求められます。キーチェーンアクセスで同名の自己署名コード署名証明書（Code Signing identity）を作成し、固定パスのバイナリを毎回同一の identity で署名することで、更新時の再許可の手間を最小限に抑えることができます。
 
 ## Commands
 
@@ -50,13 +52,13 @@ dayglass pause 1h
 dayglass reap --days 90
 ```
 
-`serve` は `127.0.0.1:4318` の JSON OTLP HTTP だけを受け、1 リクエスト 4 MiB を上限に、許可リストにあるレコードと属性だけを日次 JSONL へ書きます。`report` は実行直前に GitHub 同期を試み、認証やネットワークに失敗してもローカル集計は続けます。
+`serve` は `127.0.0.1:4318` にて JSON 形式の OTLP/HTTP リクエストのみを受け付けます。1 リクエストあたり 4 MiB を上限とし、許可リストに定義されたレコードおよび属性のみを抽出して日別の JSON Lines ファイルへ追記します。`report` は集計実行の直前に GitHub からの最新イベント同期（`sync github`）を試みますが、ネットワーク切断や未認証などで同期に失敗した場合でも、手元のローカルログを用いて集計処理を継続します。
 
 ## Data and output
 
-保存形式は OTLP/JSON Lines です。提出表は日・プロジェクト・区分、AI 利用、コミット・PR・レビュー数を含みます。コミット数や変更行数は操作で増減できるため、個人評価ではなくチームの傾向把握用の参考値として扱います。
+データの保存形式には OTLP/JSON Lines を採用しています。提出用の集計レポートには、日別・プロジェクト別・作業区分別の稼働時間、AI 併用時間、コミット数・作成 PR 数・レビューした PR 数などが含まれます。なお、コミット数や変更行数は作業スタイルによって増減し得る指標であるため、個人の人事評価ではなく、チーム全体の活動傾向を把握するための参考値として扱います。
 
-管理部の正式様式が未定のため、初期の CSV 列は `templates/` に置いています。設計判断と制約は [`docs/design.md`](docs/design.md)、実装順序は [`plan.md`](plan.md) を参照してください。
+管理部が指定する正式な提出様式は確定していないため、初期バージョンの CSV テンプレートは `templates/` ディレクトリ配下に配置しています。設計方針や技術的制約の詳細は [`docs/design.md`](docs/design.md)、実装の進め方については [`plan.md`](plan.md) を参照してください。
 
 ## Development
 
@@ -65,4 +67,4 @@ swift test
 swift build -c release
 ```
 
-GitHub Actions は macOS 上でテスト・release build を実行し、`v*` tag で Apple Silicon バイナリと checksums を GitHub Release に添付します。
+CI（GitHub Actions）では macOS ランナー上でユニットテストおよびリリースビルド（`release build`）を実行します。`v*` タグのプッシュ時には、ビルドされた Apple Silicon 向けバイナリとチェックサム（SHA-256）を GitHub Releases に自動添付します。
