@@ -264,16 +264,17 @@ public struct ReportEngine: Sendable {
     private func makeOutputRows(logs: [ObservedLog]) -> [ReportOutputRow] {
         struct Key: Hashable { let day: String; let project: String? }
         var values: [Key: ReportOutputRow] = [:]
-        for log in logs where log.name == "github.event" {
+        for log in logs where log.name == "github.event" || log.name == "git.commit" {
             let key = Key(day: dayString(log.timestamp), project: log.attributes["dayglass.project"])
             var row = values[key] ?? ReportOutputRow(day: key.day, project: key.project)
             let type = log.attributes["github.event.type"] ?? log.attributes["type"] ?? ""
             let action = log.attributes["github.event.action"] ?? log.attributes["action"] ?? ""
             let isPullRequest = type == "PullRequestEvent" || type == "PullRequestReviewEvent"
+            let isLocalCommit = log.name == "git.commit"
             row = ReportOutputRow(
                 day: row.day,
                 project: row.project,
-                commits: row.commits + (type == "PushEvent" ? 1 : 0),
+                commits: row.commits + (isLocalCommit || type == "PushEvent" ? 1 : 0),
                 changedLines: row.changedLines + (Int(log.attributes["changed_lines"] ?? "0") ?? 0),
                 createdPRs: row.createdPRs + (isPullRequest && action == "opened" ? 1 : 0),
                 mergedPRs: row.mergedPRs + (isPullRequest && action == "closed" && log.attributes["merged"] == "true" ? 1 : 0),

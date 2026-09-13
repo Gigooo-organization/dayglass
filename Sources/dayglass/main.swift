@@ -76,11 +76,17 @@ func run() throws {
     case "pause": try pause(options)
     case "daemon": try DayglassDaemon(dataRoot: defaultDataRoot).run()
     case "serve": try TelemetryServer(dataRoot: defaultDataRoot).run()
+    case "sync": try sync(options)
     default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(helpText)")
     }
 }
 
 func report(_ options: CLIOptions) throws {
+    do {
+        try GitHubSync(dataRoot: defaultDataRoot).run()
+    } catch {
+        fputs("dayglass: github sync skipped: \(error)\n", stderr)
+    }
     let month = options.value("month") ?? monthString(Date())
     let result = try loadResult(month: month)
     if options.has("questions") {
@@ -176,6 +182,13 @@ func pause(_ options: CLIOptions) throws {
     print("Paused until \(ISO8601DateFormatter().string(from: window.until))")
 }
 
+func sync(_ options: CLIOptions) throws {
+    guard options.positionals.first == "github" else {
+        throw DayglassCLIError.usage("sync requires github")
+    }
+    try GitHubSync(dataRoot: defaultDataRoot).run()
+}
+
 func loadResult(month: String) throws -> ReportResult {
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(month: month)
     let configurationURL = FileManager.default.homeDirectoryForCurrentUser
@@ -250,6 +263,7 @@ Commands:
   pause 1h
   daemon
   serve
+  sync github
   reap [--days N]
 """
 
