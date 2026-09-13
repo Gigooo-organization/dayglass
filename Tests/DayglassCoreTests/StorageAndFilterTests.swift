@@ -44,6 +44,23 @@ import Testing
         #expect(String(decoding: data, as: UTF8.self) == "{\"ok\":true}\n")
     }
 
+    @Test func sinkFallsBackToAFileWhenTheDaemonSocketIsUnavailable() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dayFile = DayFile(root: root)
+        let sink = Sink(
+            dayFile: dayFile,
+            socketPath: root.appendingPathComponent("missing.sock")
+        )
+        let date = Date(timeIntervalSince1970: 0)
+
+        try sink.append("{\"event\":\"hook\"}", signal: .logs, at: date)
+
+        let saved = try String(contentsOf: dayFile.fileURL(signal: .logs, at: date), encoding: .utf8)
+        #expect(saved == "{\"event\":\"hook\"}\n")
+    }
+
     @Test func filtersSpinnerOnlyTitleChangesButKeepsNumbers() {
         var repeats = RepeatFilter()
         var churn = ChurnFilter()
