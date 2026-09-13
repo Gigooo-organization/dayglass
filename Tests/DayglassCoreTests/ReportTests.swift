@@ -92,6 +92,90 @@ import Testing
         #expect(result.time.map(\.day) == ["2026-09-14", "2026-09-15"])
         #expect(result.time.map(\.seconds) == [900, 900])
     }
+
+    @Test func allocatesRoundedDailyMinutesByLargestRemainder() throws {
+        let first = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T09:10:00Z"),
+            attributes: ["app.name": "Terminal", "window.title": "alpha"]
+        )
+        let second = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:10:00Z"),
+            end: date("2026-09-14T09:40:00Z"),
+            attributes: ["app.name": "Terminal", "window.title": "beta"]
+        )
+        let result = ReportEngine(
+            input: ReportInput(spans: [first, second]),
+            configuration: ReportConfiguration(projects: [
+                ProjectRule(code: "A", title: ["alpha"]),
+                ProjectRule(code: "B", title: ["beta"]),
+            ])
+        ).build()
+
+        #expect(result.time.map(\.seconds) == [900, 1800])
+        #expect(result.time.reduce(0) { $0 + $1.seconds } == 2700)
+    }
+
+    @Test func emitsDeterministicQuestionsForUnassignedAndLockedGaps() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T10:00:00Z"),
+            end: date("2026-09-14T11:00:00Z"),
+            attributes: [
+                "app.name": "Google Chrome",
+                "app.bundle_id": "com.google.Chrome",
+                "url.domain": "example.com",
+            ]
+        )
+        let afk = ObservedSpan(
+            name: "afk",
+            start: date("2026-09-14T10:20:00Z"),
+            end: date("2026-09-14T10:45:00Z"),
+            attributes: ["dayglass.afk.reason": "locked"]
+        )
+        let run = ObservedSpan(
+            name: "dayglass.run",
+            start: date("2026-09-14T10:00:00Z"),
+            end: date("2026-09-14T11:00:00Z")
+        )
+        let engine = ReportEngine(input: ReportInput(spans: [focus, afk, run]))
+        let first = engine.build()
+        let second = engine.build()
+
+        #expect(first.questions == second.questions)
+        #expect(first.questions.contains { $0.kind == "unassigned" && $0.seconds == 1200 })
+        #expect(first.questions.contains { $0.kind == "gap" && $0.options == ["skip", "meeting", "research"] })
+        #expect(first.questions.allSatisfy { !$0.id.isEmpty })
+    }
+
+    @Test func aNoteOverridesInferenceAndSuppressesItsQuestion() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T12:00:00Z"),
+            end: date("2026-09-14T12:30:00Z"),
+            attributes: ["app.name": "Google Chrome", "url.domain": "example.com"]
+        )
+        let note = NoteRecord(
+            start: date("2026-09-14T12:00:00Z"),
+            end: date("2026-09-14T12:30:00Z"),
+            project: "PJ-MEETING",
+            category: "meeting"
+        )
+        let run = ObservedSpan(
+            name: "dayglass.run",
+            start: focus.start,
+            end: focus.end
+        )
+        let result = ReportEngine(input: ReportInput(spans: [focus, run]), notes: [note]).build()
+        let row = try #require(result.time.first)
+
+        #expect(row.project == "PJ-MEETING")
+        #expect(row.category == "meeting")
+        #expect(row.confidence == "confirmed")
+        #expect(result.questions.isEmpty)
+    }
 }
 
 private func date(_ value: String) -> Date {
