@@ -77,6 +77,7 @@ func run() throws {
     case "daemon": try DayglassDaemon(dataRoot: defaultDataRoot).run()
     case "serve": try TelemetryServer(dataRoot: defaultDataRoot).run()
     case "sync": try sync(options)
+    case "evidence": try evidence(options)
     default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(helpText)")
     }
 }
@@ -189,6 +190,20 @@ func sync(_ options: CLIOptions) throws {
     try GitHubSync(dataRoot: defaultDataRoot).run()
 }
 
+func evidence(_ options: CLIOptions) throws {
+    let defaultDay = DayglassCalendar.local.date(byAdding: .day, value: -1, to: Date())!
+    let day = try parseDay(options.value("day") ?? dayString(defaultDay))
+    let maxChars = Int(options.value("max-chars") ?? "\(EvidenceBuilder.defaultMaxChars)") ?? EvidenceBuilder.defaultMaxChars
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let result = EvidenceBuilder.build(
+        day: day,
+        codexRoot: URL(fileURLWithPath: options.value("codex-root") ?? home.appendingPathComponent(".codex").path),
+        claudeRoot: URL(fileURLWithPath: options.value("claude-root") ?? home.appendingPathComponent(".claude/projects").path),
+        maxChars: maxChars
+    )
+    print(result.text, terminator: "")
+}
+
 func loadResult(month: String) throws -> ReportResult {
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(month: month)
     let configurationURL = FileManager.default.homeDirectoryForCurrentUser
@@ -264,6 +279,7 @@ Commands:
   daemon
   serve
   sync github
+  evidence [--day YYYY-MM-DD] [--max-chars N]
   reap [--days N]
 """
 
