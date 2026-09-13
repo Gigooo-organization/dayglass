@@ -34,6 +34,65 @@ Homebrew の仕様上、非公式 tap の利用には明示的な信頼設定が
 
 フォアグラウンドアプリの監視（daemon）を利用するには、macOS の「システム設定 > プライバシーとセキュリティ > アクセシビリティ」での実行許可が必要です。Developer ID を用いない個人ビルドではバイナリを `~/.local/libexec/dayglass` の固定パスに配置するため、バイナリ更新のたびにアクセシビリティ権限の再許可が求められます。キーチェーンアクセスで同名の自己署名コード署名証明書（Code Signing identity）を作成し、固定パスのバイナリを毎回同一の identity で署名することで、更新時の再許可の手間を最小限に抑えることができます。
 
+## Update
+
+dayglass を最新バージョンに更新し、常駐デーモン用の固定パスへ新バイナリを反映する手順です。
+
+```sh
+brew upgrade gigooo-organization/dayglass/dayglass
+dayglass setup
+```
+
+Homebrew の仕様上、更新チェック時に tap のメタデータ更新が走る場合がありますが、`brew upgrade` によって実際にアップグレードされるパッケージは dayglass のみです。更新が存在しない場合は何も変更されません。
+
+## Project configuration
+
+`dayglass setup` を実行すると、`~/.config/dayglass/projects.toml` が存在しない場合に設定ファイルの雛形が作成されます。このファイルには、収集した git リポジトリ、作業ディレクトリ、ウィンドウタイトル、URL などを管理部指定のプロジェクトコードへ対応付ける判定ルールを記述します。
+
+```toml
+[[project]]
+code = "DAYGLASS"
+name = "dayglass"
+git = ["*github.com/Gigooo-organization/dayglass*", "*/Gigooo-organization/dayglass"]
+title = ["dayglass"]
+url = ["github.com/Gigooo-organization/dayglass*"]
+
+[[project]]
+code = "CUSTOMER-A"
+name = "顧客A"
+git = ["*github.com/Gigooo-organization/customer-a*", "*/Gigooo-organization/customer-a"]
+title = ["customer-a", "顧客A"]
+url = ["customer-a.example.com*"]
+```
+
+管理対象の案件（プロジェクト）ごとに `[[project]]` ブロックを追加します。各項目の仕様は次のとおりです。
+
+- `code`（必須）: レポートに出力されるプロジェクトコード
+- `name`: 設定ファイルを識別・管理するためのプロジェクト名称
+- `git`: Git リポジトリの URL または作業ディレクトリのパスに照合するパターン
+- `title`: ウィンドウタイトルに照合するパターン
+- `url`: ブラウザのドメイン、またはドメインとパスを連結した文字列に照合するパターン
+
+パターンの照合は大文字・小文字を区別せずに行われ、ワイルドカードとして `*`（任意の文字列）が使用可能です。`*` を含まない文字列を指定した場合は部分一致として扱われます。
+複数のルールが同一のウィンドウ情報に合致した場合は、ファイル内で**先に記述されたルールが優先**されます。
+なお、本設定は `dayglass report` による集計時に動的に評価されます。そのため、設定変更後に daemon を再起動する必要はなく、次回の集計実行時から過去のログに対しても遡及して適用されます。
+
+既定の作業区分判定ルールを拡張・カスタマイズしたい場合は、同ファイル内に `[[category]]` ブロックを追加します。
+
+```toml
+[[category]]
+category = "review"
+domains = ["reviews.example.com"]
+paths = ["/diff/"]
+bundles = ["com.example.ReviewApp"]
+```
+
+- `category`: 対象とする作業区分（`research` / `coding` / `review` / `docs` / `meeting` / `other` のいずれか）を指定
+- `domains` / `bundles`: 該当するドメイン名またはアプリケーションの bundle ID（ワイルドカード `*` に対応）
+- `paths`: URL パス（部分一致で判定）
+
+同一の `[[category]]` ブロック内では、いずれか 1 つの条件に合致した時点で該当の作業区分として判定されます。なお、既定の判定ルールで十分な場合は `[[category]]` の記述を省略できます。
+
 ## Commands
 
 ```sh
