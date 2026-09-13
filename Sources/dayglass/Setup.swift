@@ -142,6 +142,8 @@ final class SetupCoordinator {
             .write(to: launchAgents.appendingPathComponent("com.gigooo.dayglass.daemon.plist"), atomically: true, encoding: .utf8)
         try launchdPlist(label: "com.gigooo.dayglass.serve", arguments: ["serve"], binary: binary.path, logRoot: logRoot)
             .write(to: launchAgents.appendingPathComponent("com.gigooo.dayglass.serve.plist"), atomically: true, encoding: .utf8)
+        try syncLaunchdPlist(binary: binary.path, logRoot: logRoot)
+            .write(to: launchAgents.appendingPathComponent("com.gigooo.dayglass.sync.plist"), atomically: true, encoding: .utf8)
     }
 
     private func addTimeMachineExclusion() {
@@ -226,6 +228,28 @@ final class SetupCoordinator {
             <key>KeepAlive</key><true/>
             <key>StandardOutPath</key><string>\(xmlEscape(logRoot))/\(label).out.log</string>
             <key>StandardErrorPath</key><string>\(xmlEscape(logRoot))/\(label).err.log</string>
+        </dict>
+        </plist>
+        """
+    }
+
+    private func syncLaunchdPlist(binary: String, logRoot: String) -> String {
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key><string>com.gigooo.dayglass.sync</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>\(xmlEscape(binary))</string>
+                <string>sync</string>
+                <string>github</string>
+            </array>
+            <key>RunAtLoad</key><true/>
+            <key>StartInterval</key><integer>86400</integer>
+            <key>StandardOutPath</key><string>\(xmlEscape(logRoot))/com.gigooo.dayglass.sync.out.log</string>
+            <key>StandardErrorPath</key><string>\(xmlEscape(logRoot))/com.gigooo.dayglass.sync.err.log</string>
         </dict>
         </plist>
         """
