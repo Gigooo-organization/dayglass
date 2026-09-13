@@ -15,6 +15,9 @@ jobs:
       TAP_REPO_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
       - name: Build
         run: swift build -c release
       - name: Package
