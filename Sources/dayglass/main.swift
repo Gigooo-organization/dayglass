@@ -73,6 +73,8 @@ func run() throws {
     case "note": try note(options)
     case "reap": try reap(options)
     case "hook": try hook(options)
+    case "pause": try pause(options)
+    case "daemon": try DayglassDaemon(dataRoot: defaultDataRoot).run()
     default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(helpText)")
     }
 }
@@ -164,6 +166,15 @@ func hook(_ options: CLIOptions) throws {
     try HookRecorder(dataRoot: defaultDataRoot).record(event)
 }
 
+func pause(_ options: CLIOptions) throws {
+    let value = options.positionals.first ?? options.value("for")
+    guard let value, let duration = PauseStore.parseDuration(value) else {
+        throw DayglassCLIError.usage("pause requires a duration such as 15m, 2h, or 1d")
+    }
+    let window = try PauseStore(url: defaultDataRoot.appendingPathComponent("state/pause.json")).pause(for: duration)
+    print("Paused until \(ISO8601DateFormatter().string(from: window.until))")
+}
+
 func loadResult(month: String) throws -> ReportResult {
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(month: month)
     let configurationURL = FileManager.default.homeDirectoryForCurrentUser
@@ -235,6 +246,8 @@ Commands:
   note --day YYYY-MM-DD --from HH:MM --to HH:MM --project CODE --category CATEGORY
   note --day YYYY-MM-DD --summary TEXT
   hook claude|codex < hook-payload.json
+  pause 1h
+  daemon
   reap [--days N]
 """
 

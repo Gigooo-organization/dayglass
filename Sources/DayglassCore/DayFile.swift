@@ -77,7 +77,7 @@ public final class Sink: @unchecked Sendable {
 
     public func append(_ line: String, signal: OTLPFileSignal, at date: Date) throws {
         if let socketPath, FileManager.default.fileExists(atPath: socketPath.path),
-           sendToSocket(line: line, path: socketPath.path) {
+           sendToSocket(line: line, signal: signal, date: date, path: socketPath.path) {
             return
         }
 
@@ -96,8 +96,14 @@ public final class Sink: @unchecked Sendable {
         try handle.write(contentsOf: Data((line + suffix).utf8))
     }
 
-    private func sendToSocket(line: String, path: String) -> Bool {
-        let bytes = Array(line.hasSuffix("\n") ? line.utf8 : (line + "\n").utf8)
+    private func sendToSocket(line: String, signal: OTLPFileSignal, date: Date, path: String) -> Bool {
+        let envelope: [String: Any] = [
+            "signal": signal.rawValue,
+            "date": date.timeIntervalSince1970,
+            "line": line,
+        ]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: envelope, options: [.sortedKeys]) else { return false }
+        let bytes = Array(encoded) + [0x0A]
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
         let capacity = MemoryLayout.size(ofValue: address.sun_path)
