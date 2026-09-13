@@ -83,6 +83,18 @@ public struct OTLPSpan: Codable, Equatable, Sendable {
     }
 }
 
+public struct OTLPLogRecord: Codable, Equatable, Sendable {
+    public let timeUnixNano: String
+    public let eventName: String
+    public let attributes: [OTLPAttribute]
+
+    public init(timeUnixNano: String, eventName: String, attributes: [OTLPAttribute] = []) {
+        self.timeUnixNano = timeUnixNano
+        self.eventName = eventName
+        self.attributes = attributes
+    }
+}
+
 private struct OTLPScopeSpans: Codable, Equatable, Sendable {
     let spans: [OTLPSpan]
 }
@@ -96,6 +108,19 @@ private struct OTLPTraceExport: Codable, Equatable, Sendable {
     let resourceSpans: [OTLPResourceSpans]
 }
 
+private struct OTLPScopeLogs: Codable, Equatable, Sendable {
+    let logRecords: [OTLPLogRecord]
+}
+
+private struct OTLPResourceLogs: Codable, Equatable, Sendable {
+    let resource: OTLPResource
+    let scopeLogs: [OTLPScopeLogs]
+}
+
+private struct OTLPLogExport: Codable, Equatable, Sendable {
+    let resourceLogs: [OTLPResourceLogs]
+}
+
 public enum OTLPJSONL {
     public static func traceLine(
         span: OTLPSpan,
@@ -103,6 +128,25 @@ public enum OTLPJSONL {
     ) throws -> String {
         let value = OTLPTraceExport(
             resourceSpans: [OTLPResourceSpans(resource: resource, scopeSpans: [OTLPScopeSpans(spans: [span])])]
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    public static func logLine(
+        eventName: String,
+        at date: Date,
+        attributes: [OTLPAttribute] = [],
+        resource: OTLPResource = OTLPResource()
+    ) throws -> String {
+        let record = OTLPLogRecord(
+            timeUnixNano: String(Int64(date.timeIntervalSince1970 * 1_000_000_000)),
+            eventName: eventName,
+            attributes: attributes
+        )
+        let value = OTLPLogExport(
+            resourceLogs: [OTLPResourceLogs(resource: resource, scopeLogs: [OTLPScopeLogs(logRecords: [record])])]
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

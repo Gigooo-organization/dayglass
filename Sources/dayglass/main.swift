@@ -72,6 +72,7 @@ func run() throws {
     case "report": try report(options)
     case "note": try note(options)
     case "reap": try reap(options)
+    case "hook": try hook(options)
     default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(helpText)")
     }
 }
@@ -154,6 +155,15 @@ func reap(_ options: CLIOptions) throws {
     print("Removed \(removed) day(s)")
 }
 
+func hook(_ options: CLIOptions) throws {
+    guard let toolName = options.positionals.first, let tool = HookTool(rawValue: toolName) else {
+        throw DayglassCLIError.usage("hook requires claude or codex")
+    }
+    let payload = FileHandle.standardInput.readDataToEndOfFile()
+    let event = try HookDecoder.decode(tool: tool, data: payload)
+    try HookRecorder(dataRoot: defaultDataRoot).record(event)
+}
+
 func loadResult(month: String) throws -> ReportResult {
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(month: month)
     let configurationURL = FileManager.default.homeDirectoryForCurrentUser
@@ -224,6 +234,7 @@ Commands:
   note --question ID --project CODE --category CATEGORY | --skip
   note --day YYYY-MM-DD --from HH:MM --to HH:MM --project CODE --category CATEGORY
   note --day YYYY-MM-DD --summary TEXT
+  hook claude|codex < hook-payload.json
   reap [--days N]
 """
 
