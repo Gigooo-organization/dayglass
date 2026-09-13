@@ -75,6 +75,7 @@ func run() throws {
     case "hook": try hook(options)
     case "pause": try pause(options)
     case "daemon": try DayglassDaemon(dataRoot: defaultDataRoot).run()
+    case "serve": try TelemetryServer(dataRoot: defaultDataRoot).run()
     default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(helpText)")
     }
 }
@@ -248,6 +249,7 @@ Commands:
   hook claude|codex < hook-payload.json
   pause 1h
   daemon
+  serve
   reap [--days N]
 """
 
