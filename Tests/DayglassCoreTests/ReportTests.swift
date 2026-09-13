@@ -1,0 +1,106 @@
+import Foundation
+import Testing
+@testable import DayglassCore
+
+@Suite struct ReportTests {
+    @Test func subtractsAfkAndKeepsAiOverlapSeparate() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T10:00:00Z"),
+            attributes: [
+                "app.name": "Google Chrome",
+                "app.bundle_id": "com.google.Chrome",
+                "window.title": "repo-a - Pull requests",
+                "url.domain": "github.com",
+                "url.path": "/acme/repo-a/pull/12",
+            ]
+        )
+        let afk = ObservedSpan(
+            name: "afk",
+            start: date("2026-09-14T09:15:00Z"),
+            end: date("2026-09-14T09:30:00Z"),
+            attributes: ["dayglass.afk.reason": "idle"]
+        )
+        let aiTurn = ObservedSpan(
+            name: "gen_ai.turn",
+            start: date("2026-09-14T09:05:00Z"),
+            end: date("2026-09-14T09:35:00Z"),
+            attributes: ["gen_ai.agent.name": "codex"]
+        )
+        let result = ReportEngine(
+            input: ReportInput(spans: [focus, afk, aiTurn]),
+            configuration: ReportConfiguration(projects: [
+                ProjectRule(code: "PJ-A", name: "A", title: ["repo-a"])
+            ])
+        ).build()
+
+        let row = try #require(result.time.first)
+        #expect(row.project == "PJ-A")
+        #expect(row.category == "review")
+        #expect(row.seconds == 2700)
+        #expect(row.aiSeconds == 900)
+        #expect(row.projectBasis == "title")
+        #expect(row.categoryBasis == "url")
+        #expect(row.confidence == "inferred")
+    }
+
+    @Test func browserDoesNotInheritACompetingBackgroundSession() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T11:00:00Z"),
+            end: date("2026-09-14T11:20:00Z"),
+            attributes: [
+                "app.name": "Google Chrome",
+                "app.bundle_id": "com.google.Chrome",
+                "url.domain": "example.com",
+            ]
+        )
+        let session = ObservedSpan(
+            name: "gen_ai.session",
+            start: date("2026-09-14T10:50:00Z"),
+            end: date("2026-09-14T11:30:00Z"),
+            attributes: [
+                "dayglass.project": "PJ-B",
+                "vcs.repository.url.full": "https://github.com/acme/repo-b",
+            ]
+        )
+        let result = ReportEngine(
+            input: ReportInput(spans: [focus, session]),
+            configuration: ReportConfiguration(projects: [
+                ProjectRule(code: "PJ-B", name: "B", git: ["github.com/acme/repo-b"])
+            ])
+        ).build()
+
+        let row = try #require(result.time.first)
+        #expect(row.project == nil)
+        #expect(row.projectBasis == "none")
+    }
+
+    @Test func splitsFocusAtLocalMidnight() {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T23:50:00Z"),
+            end: date("2026-09-15T00:10:00Z"),
+            attributes: ["app.name": "Terminal", "app.bundle_id": "com.apple.Terminal"]
+        )
+        let result = ReportEngine(
+            input: ReportInput(spans: [focus]),
+            configuration: ReportConfiguration(calendar: utcCalendar())
+        ).build()
+
+        #expect(result.time.map(\.day) == ["2026-09-14", "2026-09-15"])
+        #expect(result.time.map(\.seconds) == [900, 900])
+    }
+}
+
+private func date(_ value: String) -> Date {
+    let formatter = ISO8601DateFormatter()
+    return formatter.date(from: value)!
+}
+
+private func utcCalendar() -> Calendar {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    return calendar
+}
