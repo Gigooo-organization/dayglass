@@ -96,11 +96,28 @@ bundles = ["com.example.ReviewApp"]
 ## Commands
 
 ```sh
-dayglass daemon
-dayglass serve
-dayglass hook claude < hook-payload.json
-dayglass hook codex < hook-payload.json
-dayglass sync github
+dayglass --help
+dayglass help report
+dayglass report --help
+```
+
+`help` の後にコマンド名を指定するか、各コマンドに `--help` / `-h` を付けると、利用可能なオプションと既定値を確認できます。
+
+| コマンド | 用途 |
+|---|---|
+| `report` | 観測データを月次で集計し、未確定事項の確認や提出物の凍結を行う |
+| `note` | プロジェクト・作業区分の訂正、除外、日次要約を記録する |
+| `evidence` | ローカルのAIトランスクリプトから伏字済みの作業抜粋を作る |
+| `pause` | 指定時間の観測を一時停止する |
+| `sync github` | `gh` を使って設定対象のGitHub活動を取得する |
+| `setup` | hooks、OTLP設定、設定ファイル、skill、launchd agentを導入する |
+| `daemon` | フォアグラウンドアプリと入力アイドル時間を観測する |
+| `serve` | `127.0.0.1:4318` でJSON OTLP/HTTPを受信する |
+| `reap` | 保存期限を過ぎた日次観測ログを削除する |
+
+よく使う操作例:
+
+```sh
 dayglass report --month 2026-09 --format csv|json|md|otlp-metrics
 dayglass report --questions --month 2026-09
 dayglass note --question ID --project CODE --category coding

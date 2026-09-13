@@ -20,10 +20,15 @@ struct CLIOptions {
 
     init(_ arguments: ArraySlice<String>) throws {
         let arguments = Array(arguments)
-        let flagKeys: Set<String> = ["questions", "no-titles", "freeze", "skip"]
+        let flagKeys: Set<String> = ["questions", "no-titles", "freeze", "skip", "help", "h"]
         var index = 0
         while index < arguments.count {
             let argument = arguments[index]
+            if argument == "-h" {
+                flags.insert("h")
+                index += 1
+                continue
+            }
             guard argument.hasPrefix("--") else {
                 positionals.append(argument)
                 index += 1
@@ -60,7 +65,18 @@ let defaultDataRoot: URL = {
 func run() throws {
     let arguments = Array(CommandLine.arguments.dropFirst())
     guard let command = arguments.first else {
-        print(helpText)
+        print(CLIHelp.overview)
+        return
+    }
+    if command == "--help" || command == "-h" || command == "help" {
+        if let target = arguments.dropFirst().first {
+            guard let text = CLIHelp.text(for: target) else {
+                throw DayglassCLIError.usage("unknown command: \(target)\n\n\(CLIHelp.overview)")
+            }
+            print(text)
+        } else {
+            print(CLIHelp.overview)
+        }
         return
     }
     if command == "--version" || command == "version" {
@@ -68,6 +84,13 @@ func run() throws {
         return
     }
     let options = try CLIOptions(arguments.dropFirst())
+    if options.has("help") || options.has("h") {
+        guard let text = CLIHelp.text(for: command) else {
+            throw DayglassCLIError.usage("unknown command: \(command)\n\n\(CLIHelp.overview)")
+        }
+        print(text)
+        return
+    }
     switch command {
     case "report": try report(options)
     case "note": try note(options)
@@ -79,7 +102,7 @@ func run() throws {
     case "sync": try sync(options)
     case "evidence": try evidence(options)
     case "setup": try setup(options)
-    default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(helpText)")
+    default: throw DayglassCLIError.usage("unknown command: \(command)\n\n\(CLIHelp.overview)")
     }
 }
 
@@ -271,24 +294,6 @@ func parseClock(_ value: String, on day: Date) throws -> Date {
     }
     return DayglassCalendar.local.date(bySettingHour: fields[0], minute: fields[1], second: 0, of: day)!
 }
-
-let helpText = """
-dayglass \(DayglassCore.version)
-
-Commands:
-  report --month YYYY-MM --format csv|json|md|otlp-metrics [--questions] [--freeze]
-  note --question ID --project CODE --category CATEGORY | --skip
-  note --day YYYY-MM-DD --from HH:MM --to HH:MM --project CODE --category CATEGORY
-  note --day YYYY-MM-DD --summary TEXT
-  hook claude|codex < hook-payload.json
-  pause 1h
-  daemon
-  serve
-  sync github
-  evidence [--day YYYY-MM-DD] [--max-chars N]
-  setup [hooks|telemetry]
-  reap [--days N]
-"""
 
 do {
     try run()
