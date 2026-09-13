@@ -379,7 +379,7 @@ skill が独自の判断で選択肢を増やしたり、無操作区間（`gap`
 
 ## 9. 配布とインストール
 
-- `brew install gigooo-organization/tap/dayglass` による提供を目指す。各自の Mac ローカル環境でコンパイルするソースビルド方式の formula とする
+- `brew trust --formula gigooo-organization/dayglass/dayglass` 後の `brew install gigooo-organization/dayglass/dayglass` による提供を目指す。各自の Mac ローカル環境でコンパイルするソースビルド方式の formula とする
 - **署名は個人ビルドを前提とする**（Developer ID による公的署名は行わない）。macOS のアクセシビリティ権限はコード署名 ID に紐づくため、バイナリを固定パスへコピーした上で自己署名を施す方式（プロトタイプの `install.sh` の手法）を採用する。バイナリ更新のたびにアクセシビリティ権限の再許可が必要となる旨は README に明記する
 - `dayglass setup` コマンドにより、launchd エージェントの登録、hooks の設定追記（両エージェント対応）、`settings.json` / `config.toml` への OTel 設定、`source.json`（端末 ID）の生成、`projects.toml` の雛形作成、skill の配置を一括して実行する。既存の設定ファイルは上書き破壊せず、必要な差分のみを追記する
 - `gh`（GitHub CLI）を Homebrew の依存関係とする。`dayglass setup` 時に `gh auth status` で認証状態を検証し、未ログインであれば `gh auth login` の実行を案内する。`sync github` による同期処理は、launchd による 1 日 1 回の定期実行に加え、`report` コマンド実行直前にもトリガーする

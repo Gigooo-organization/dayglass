@@ -23,7 +23,8 @@ Apple Silicon Mac 向けのローカル工数素材・集計ツールです。�
 ## Install
 
 ```sh
-brew install gigooo-organization/tap/dayglass
+brew trust --formula gigooo-organization/dayglass/dayglass
+brew install gigooo-organization/dayglass/dayglass
 dayglass setup
 ```
 
