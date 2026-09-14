@@ -108,7 +108,9 @@ func run() throws {
 
 func report(_ options: CLIOptions) throws {
     do {
-        try GitHubSync(dataRoot: defaultDataRoot).run()
+        // Progress belongs on stderr here: --format json has to stay pipeable.
+        let imported = try GitHubSync(dataRoot: defaultDataRoot).run()
+        fputs("dayglass: imported \(imported) activity record(s)\n", stderr)
     } catch {
         fputs("dayglass: github sync skipped: \(error)\n", stderr)
     }
@@ -211,7 +213,7 @@ func sync(_ options: CLIOptions) throws {
     guard options.positionals.first == "github" else {
         throw DayglassCLIError.usage("sync requires github")
     }
-    try GitHubSync(dataRoot: defaultDataRoot).run()
+    print("Imported \(try GitHubSync(dataRoot: defaultDataRoot).run()) activity record(s)")
 }
 
 func evidence(_ options: CLIOptions) throws {

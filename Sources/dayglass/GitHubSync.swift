@@ -53,7 +53,6 @@ final class GitHubSync {
         imported += try importPullRequests(sink: sink, known: &known, configuration: configuration)
         imported += try importLocalCommits(sink: sink, known: &known, configuration: configuration)
         try saveState(State(ids: known.sorted()), to: stateURL)
-        print("Imported \(imported) activity record(s)")
         return imported
     }
 
