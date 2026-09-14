@@ -120,7 +120,8 @@ func report(_ options: CLIOptions) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        print(String(decoding: try encoder.encode(result.questions), as: UTF8.self))
+        let questions = options.has("no-titles") ? result.questions.map { $0.withoutTitles() } : result.questions
+        print(String(decoding: try encoder.encode(questions), as: UTF8.self))
     } else {
         let format = options.value("format").flatMap { ReportFormat(rawValue: $0) } ?? .json
         let table = options.value("table").flatMap { ReportTable(rawValue: $0) } ?? .time

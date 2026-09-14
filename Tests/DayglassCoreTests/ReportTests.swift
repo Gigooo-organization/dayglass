@@ -150,6 +150,62 @@ import Testing
         #expect(first.questions.allSatisfy { !$0.id.isEmpty })
     }
 
+    @Test func attachesDistinctOnScreenEvidenceToQuestions() throws {
+        let first = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T13:00:00Z"),
+            end: date("2026-09-14T13:15:00Z"),
+            attributes: ["app.name": "Ghostty", "window.title": "dayglass"]
+        )
+        let second = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T13:15:00Z"),
+            end: date("2026-09-14T13:30:00Z"),
+            attributes: ["app.name": "Ghostty", "window.title": "dayglass"]
+        )
+        let run = ObservedSpan(name: "dayglass.run", start: first.start, end: second.end)
+        let result = ReportEngine(input: ReportInput(spans: [first, second, run])).build()
+
+        let question = try #require(result.questions.first { $0.kind == "unassigned" })
+        #expect(question.evidence == ["dayglass"])
+    }
+
+    @Test func fallsBackToTheUrlFragmentWhenNoWindowTitleWasCaptured() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T14:00:00Z"),
+            end: date("2026-09-14T14:30:00Z"),
+            attributes: [
+                "app.name": "Google Chrome",
+                "app.bundle_id": "com.google.Chrome",
+                "url.domain": "example.com",
+                "url.path": "/acme/repo-a/pull/12",
+            ]
+        )
+        let run = ObservedSpan(name: "dayglass.run", start: focus.start, end: focus.end)
+        let result = ReportEngine(input: ReportInput(spans: [focus, run])).build()
+
+        let question = try #require(result.questions.first { $0.kind == "unassigned" })
+        #expect(question.evidence == ["example.com/acme/repo-a/pull/12"])
+    }
+
+    @Test func redactingAQuestionDropsItsOnScreenEvidence() {
+        let question = ReportQuestion(
+            id: "abc",
+            kind: "unassigned",
+            start: date("2026-09-14T13:00:00Z"),
+            end: date("2026-09-14T13:30:00Z"),
+            seconds: 1800,
+            options: ["PJ-A"],
+            evidence: ["dayglass", "example.com/acme"]
+        )
+
+        let redacted = question.withoutTitles()
+
+        #expect(redacted.evidence.isEmpty)
+        #expect(redacted == ReportQuestion(id: "abc", kind: "unassigned", start: question.start, end: question.end, seconds: 1800, options: ["PJ-A"]))
+    }
+
     @Test func aNoteOverridesInferenceAndSuppressesItsQuestion() throws {
         let focus = ObservedSpan(
             name: "focus",

@@ -294,26 +294,43 @@ public struct ReportEngine: Sendable {
     ) -> [ReportQuestion] {
         var questions: [ReportQuestion] = []
         for candidate in merge(candidates.filter { $0.project == nil }.map(\ .range)) where Double(duration(candidate)) >= configuration.thresholds.unassigned {
-            questions.append(question(kind: "unassigned", range: candidate, options: neighboringProjects(candidates: candidates, range: candidate), evidence: []))
+            questions.append(question(kind: "unassigned", range: candidate, options: neighboringProjects(candidates: candidates, range: candidate), evidence: onScreenEvidence(in: candidate, focus: focus)))
         }
         for candidate in candidates where candidate.projectAmbiguous {
-            questions.append(question(kind: "ambiguous_project", range: candidate.range, options: configuration.projects.map(\ .code), evidence: []))
+            questions.append(question(kind: "ambiguous_project", range: candidate.range, options: configuration.projects.map(\ .code), evidence: onScreenEvidence(in: candidate.range, focus: focus)))
         }
         for candidate in merge(candidates.filter { $0.categoryAmbiguous && $0.aiSeconds == 0 }.map(\ .range)) where Double(duration(candidate)) >= configuration.thresholds.ambiguousCategory {
-            questions.append(question(kind: "ambiguous_category", range: candidate, options: ["coding", "review", "docs", "research"], evidence: []))
+            questions.append(question(kind: "ambiguous_category", range: candidate, options: ["coding", "review", "docs", "research"], evidence: onScreenEvidence(in: candidate, focus: focus)))
         }
         if let activeWindow {
             for span in merge(afk.filter { $0.attributes["dayglass.afk.reason"] != "paused" }.map { TimeRange(start: max($0.start, activeWindow.start), end: min($0.end, activeWindow.end)) }.filter { $0.end > $0.start }) where Double(duration(span)) >= configuration.thresholds.gap {
                 let reason = afk.first { $0.start <= span.start && $0.end >= span.end }?.attributes["dayglass.afk.reason"]
                 let options = reason == "locked" || reason == "sleep" ? ["skip", "meeting", "research"] : ["meeting", "research", "skip"]
-                questions.append(question(kind: "gap", range: span, options: options, evidence: []))
+                questions.append(question(kind: "gap", range: span, options: options, evidence: onScreenEvidence(in: span, focus: focus)))
             }
             let runs = input.spans.filter { $0.name == "dayglass.run" }.map { TimeRange(start: $0.start, end: $0.end) }
             for missing in subtract(activeWindow, by: runs) where Double(duration(missing)) >= configuration.thresholds.missing {
-                questions.append(question(kind: "missing", range: missing, options: ["meeting", "research", "skip", "daemon stopped"], evidence: []))
+                questions.append(question(kind: "missing", range: missing, options: ["meeting", "research", "skip", "daemon stopped"], evidence: onScreenEvidence(in: missing, focus: focus)))
             }
         }
         return questions.sorted { $0.start == $1.start ? $0.kind < $1.kind : $0.start < $1.start }
+    }
+
+    /// Window titles and URL fragments that were on screen during `range`, so the
+    /// person answering can recall what the block was. `--no-titles` drops these.
+    private func onScreenEvidence(in range: TimeRange, focus: [ObservedSpan]) -> [String] {
+        var fragments: [String] = []
+        for span in focus.sorted(by: { $0.start < $1.start }) where span.end > range.start && span.start < range.end {
+            guard let fragment = evidenceFragment(span), !fragments.contains(fragment) else { continue }
+            fragments.append(fragment)
+        }
+        return Array(fragments.prefix(4))
+    }
+
+    private func evidenceFragment(_ span: ObservedSpan) -> String? {
+        if let title = span.attributes["window.title"], !title.isEmpty { return title }
+        guard let domain = span.attributes["url.domain"], !domain.isEmpty else { return nil }
+        return domain + (span.attributes["url.path"] ?? "")
     }
 
     private func question(kind: String, range: TimeRange, options: [String], evidence: [String]) -> ReportQuestion {

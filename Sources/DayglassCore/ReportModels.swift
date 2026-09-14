@@ -316,6 +316,12 @@ public struct ReportQuestion: Codable, Equatable, Sendable {
         self.options = options
         self.evidence = evidence
     }
+
+    /// Evidence quotes local window titles and URLs, so every output path that
+    /// honours `--no-titles` has to strip it through here.
+    public func withoutTitles() -> ReportQuestion {
+        ReportQuestion(id: id, kind: kind, start: start, end: end, seconds: seconds, options: options)
+    }
 }
 
 public struct ReportResult: Codable, Equatable, Sendable {
