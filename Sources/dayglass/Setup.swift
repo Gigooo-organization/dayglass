@@ -340,12 +340,15 @@ description: Review and freeze a dayglass work report.
 3. Record each answer immediately with `dayglass note --question`.
 4. Ask once about meetings outside Zoom, Meet, or Teams and record explicit times.
 5. Re-run the report and show the remaining unassigned seconds.
-6. Run `dayglass evidence --day YYYY-MM-DD` for bounded, redacted request/outcome material.
-7. Draft one to three lines per project; keep repository names and PR numbers unchanged.
-8. Let the user review and correct the draft, then save it with `dayglass note --day --summary`.
-9. Run `dayglass report --freeze --format csv` and ask the user to inspect and submit it manually.
+6. When the same repository, host, or application needed the same answer more than once this
+   month, show the `projects.toml` rule that would have answered it and ask whether to add it.
+   Rules apply retroactively, so offer this before freezing. Let the user edit the file.
+7. Run `dayglass evidence --day YYYY-MM-DD` for bounded, redacted request/outcome material.
+8. Draft one to three lines per project; keep repository names and PR numbers unchanged.
+9. Let the user review and correct the draft, then save it with `dayglass note --day --summary`.
+10. Run `dayglass report --freeze --format csv` and ask the user to inspect and submit it manually.
 
-Never invent candidates, treat a gap as a meeting, or send raw logs. Only the user's explicit answer may add a project or category.
+Never invent candidates, treat a gap as a meeting, or send raw logs. Only the user's explicit answer may add a project or category, and only the user edits `projects.toml`.
 """
 
 private let dayglassSearchSkill = """
