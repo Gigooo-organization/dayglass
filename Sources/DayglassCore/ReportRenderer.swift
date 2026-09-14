@@ -42,7 +42,10 @@ public enum ReportRenderer {
                 title: nil
             )
         } : result.blocks
-        let value = ReportResult(time: result.time, ai: result.ai, output: result.output, blocks: blocks, questions: result.questions)
+        let questions = noTitles ? result.questions.map {
+            ReportQuestion(id: $0.id, kind: $0.kind, start: $0.start, end: $0.end, seconds: $0.seconds, options: $0.options)
+        } : result.questions
+        let value = ReportResult(time: result.time, ai: result.ai, output: result.output, blocks: blocks, questions: questions)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

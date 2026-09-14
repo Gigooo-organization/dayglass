@@ -38,11 +38,21 @@ import Testing
             aiSeconds: 0,
             title: "private window title"
         )
-        let result = ReportResult(time: [], blocks: [block], questions: [])
+        let question = ReportQuestion(
+            id: "question-1",
+            kind: "unassigned",
+            start: block.start,
+            end: block.end,
+            seconds: 900,
+            options: ["PJ-A"],
+            evidence: ["private question evidence"]
+        )
+        let result = ReportResult(time: [], blocks: [block], questions: [question])
 
         let json = try ReportRenderer.render(result, format: .json, noTitles: true)
 
         #expect(!json.contains("private window title"))
+        #expect(!json.contains("private question evidence"))
         #expect(json.contains("PJ-A"))
     }
 

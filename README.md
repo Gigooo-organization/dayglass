@@ -115,6 +115,8 @@ dayglass report --help
 | `serve` | `127.0.0.1:4318` でJSON OTLP/HTTPを受信する |
 | `reap` | 保存期限を過ぎた日次観測ログを削除する |
 
+`dayglass setup` は `dayglass-report` に加え、自然言語の質問から安全な集計結果を検索する `dayglass-search` skillをClaude CodeとCodexへインストールします。検索skillは `--no-titles` のレポートと伏字済みの `evidence` だけを使用し、生ログやトランスクリプト全文を読みません。
+
 よく使う操作例:
 
 ```sh

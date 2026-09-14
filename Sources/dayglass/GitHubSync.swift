@@ -245,22 +245,19 @@ final class GitHubSync {
     }
 
     private func commandData(_ arguments: [String]) throws -> Data {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = arguments.first == "git" ? arguments : ([arguments.first == "api" || arguments.first == "search" ? "gh" : "git"] + arguments)
-        if arguments.first == "api" || arguments.first == "search" { process.arguments = ["gh"] + arguments }
-        if arguments.first == "-C" { process.arguments = ["git"] + arguments }
-        let output = Pipe()
-        let error = Pipe()
-        process.standardOutput = output
-        process.standardError = error
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            let message = String(decoding: error.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw GitHubSyncError.message(message.isEmpty ? "command failed" : message)
+        do {
+            return try CommandRunner.data(executable(for: arguments) + arguments)
+        } catch let failure as CommandRunner.Failure {
+            throw GitHubSyncError.message(failure.description)
         }
-        return output.fileHandleForReading.readDataToEndOfFile()
+    }
+
+    private func executable(for arguments: [String]) -> [String] {
+        switch arguments.first {
+        case "git": return []
+        case "api", "search": return ["gh"]
+        default: return ["git"]
+        }
     }
 }
 
