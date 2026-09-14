@@ -1,3 +1,4 @@
+import DayglassCore
 import Foundation
 
 final class SetupCoordinator {
@@ -132,21 +133,59 @@ final class SetupCoordinator {
 
     private func installLaunchAgents() throws {
         let binary = home.appendingPathComponent(".local/libexec/dayglass")
-        let current = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
+        // CommandLine.arguments[0] is whatever the shell typed: a PATH lookup
+        // leaves it as the bare word `dayglass`, which resolves against the
+        // working directory and copies a file that is not there.
+        let current = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0]))
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let launchAgents = home.appendingPathComponent("Library/LaunchAgents")
+        try fileManager.createDirectory(at: launchAgents, withIntermediateDirectories: true)
+        let logRoot = dataRoot.appendingPathComponent("state", isDirectory: true).path
+        let plists: [(label: String, contents: String)] = [
+            ("com.gigooo.dayglass.daemon", launchdPlist(label: "com.gigooo.dayglass.daemon", arguments: ["daemon"], binary: binary.path, logRoot: logRoot)),
+            ("com.gigooo.dayglass.serve", launchdPlist(label: "com.gigooo.dayglass.serve", arguments: ["serve"], binary: binary.path, logRoot: logRoot)),
+            ("com.gigooo.dayglass.sync", syncLaunchdPlist(binary: binary.path, logRoot: logRoot)),
+        ]
+
+        // Stop the agents before replacing the binary they run, so the fresh
+        // copy is what comes back up.
+        for plist in plists { bootout(label: plist.label) }
         try fileManager.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
         if current.path != binary.path {
             if fileManager.fileExists(atPath: binary.path) { try fileManager.removeItem(at: binary) }
             try fileManager.copyItem(at: current, to: binary)
         }
-        let launchAgents = home.appendingPathComponent("Library/LaunchAgents")
-        try fileManager.createDirectory(at: launchAgents, withIntermediateDirectories: true)
-        let logRoot = dataRoot.appendingPathComponent("state", isDirectory: true).path
-        try launchdPlist(label: "com.gigooo.dayglass.daemon", arguments: ["daemon"], binary: binary.path, logRoot: logRoot)
-            .write(to: launchAgents.appendingPathComponent("com.gigooo.dayglass.daemon.plist"), atomically: true, encoding: .utf8)
-        try launchdPlist(label: "com.gigooo.dayglass.serve", arguments: ["serve"], binary: binary.path, logRoot: logRoot)
-            .write(to: launchAgents.appendingPathComponent("com.gigooo.dayglass.serve.plist"), atomically: true, encoding: .utf8)
-        try syncLaunchdPlist(binary: binary.path, logRoot: logRoot)
-            .write(to: launchAgents.appendingPathComponent("com.gigooo.dayglass.sync.plist"), atomically: true, encoding: .utf8)
+        for plist in plists {
+            let url = launchAgents.appendingPathComponent("\(plist.label).plist")
+            try plist.contents.write(to: url, atomically: true, encoding: .utf8)
+            bootstrap(plist: url, label: plist.label)
+        }
+    }
+
+    private var launchdDomain: String { "gui/\(getuid())" }
+
+    private func bootout(label: String) {
+        // Fails when the agent was never loaded; that is the normal first run.
+        _ = try? CommandRunner.data(["launchctl", "bootout", "\(launchdDomain)/\(label)"])
+    }
+
+    private func bootstrap(plist: URL, label: String) {
+        // bootout returns before launchd has finished tearing the job down, and
+        // a KeepAlive agent may be respawning meanwhile; bootstrapping into a
+        // domain that still holds the label fails with EIO. Retry until it goes.
+        var lastError: Error?
+        for attempt in 0..<10 {
+            do {
+                _ = try CommandRunner.data(["launchctl", "bootstrap", launchdDomain, plist.path])
+                print("launchd: \(label) started")
+                return
+            } catch {
+                lastError = error
+                Thread.sleep(forTimeInterval: 0.2 * Double(attempt + 1))
+            }
+        }
+        print("launchd: \(label) could not start (\(lastError.map(String.init(describing:)) ?? "unknown")); run launchctl bootstrap \(launchdDomain) \(plist.path)")
     }
 
     private func addTimeMachineExclusion() {
@@ -215,6 +254,20 @@ final class SetupCoordinator {
         return false
     }
 
+    /// launchd hands an agent a bare `/usr/bin:/bin:/usr/sbin:/sbin`, so `gh`
+    /// and `git` from Homebrew, Nix, or mise are simply missing. Copy the PATH
+    /// that setup itself was run with, which is the one that found dayglass.
+    ///
+    /// ponytail: snapshot, not a live lookup. Re-run `dayglass setup` if a
+    /// package manager moves gh to a new store path.
+    private var pathEnvironment: String {
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        return """
+            <key>EnvironmentVariables</key>
+            <dict><key>PATH</key><string>\(xmlEscape(path))</string></dict>
+        """
+    }
+
     private func launchdPlist(label: String, arguments: [String], binary: String, logRoot: String) -> String {
         let values = ([binary] + arguments).map { "        <string>\(xmlEscape($0))</string>" }.joined(separator: "\n")
         return """
@@ -229,6 +282,7 @@ final class SetupCoordinator {
             </array>
             <key>RunAtLoad</key><true/>
             <key>KeepAlive</key><true/>
+        \(pathEnvironment)
             <key>StandardOutPath</key><string>\(xmlEscape(logRoot))/\(label).out.log</string>
             <key>StandardErrorPath</key><string>\(xmlEscape(logRoot))/\(label).err.log</string>
         </dict>
@@ -251,6 +305,7 @@ final class SetupCoordinator {
             </array>
             <key>RunAtLoad</key><true/>
             <key>StartInterval</key><integer>86400</integer>
+        \(pathEnvironment)
             <key>StandardOutPath</key><string>\(xmlEscape(logRoot))/com.gigooo.dayglass.sync.out.log</string>
             <key>StandardErrorPath</key><string>\(xmlEscape(logRoot))/com.gigooo.dayglass.sync.err.log</string>
         </dict>
