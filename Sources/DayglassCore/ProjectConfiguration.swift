@@ -1,7 +1,7 @@
 import Foundation
 
 public extension ReportConfiguration {
-    static func loadTOML(from url: URL, calendar: Calendar = .current) throws -> ReportConfiguration {
+    static func loadTOML(from url: URL, calendar: Calendar = DayglassCalendar.local) throws -> ReportConfiguration {
         let text = try String(contentsOf: url, encoding: .utf8)
         var projects: [ProjectRule] = []
         var categories: [CategoryRule] = []
