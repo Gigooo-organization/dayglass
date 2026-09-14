@@ -75,7 +75,6 @@ public struct ReportEngine: Sendable {
         let rows = roundedRows(candidates: candidates)
         let questions = makeQuestions(
             candidates: candidates,
-            blocks: blocks,
             afk: afk,
             activeWindow: activeWindow,
             focus: focus
@@ -220,15 +219,16 @@ public struct ReportEngine: Sendable {
 
     private func makeAIRows(turns: [ObservedSpan], sessions: [ObservedSpan]) -> [ReportAIRow] {
         struct Key: Hashable { let day: String; let project: String?; let agent: String }
-        var values: [Key: (sessions: Set<String>, turns: Int, edits: Int, input: Int, read: Int, write: Int, output: Int)] = [:]
+        typealias Totals = (sessions: Set<String>, turns: Int, edits: Int, input: Int, read: Int, write: Int, output: Int)
+        let empty: Totals = (sessions: [], turns: 0, edits: 0, input: 0, read: 0, write: 0, output: 0)
+        var values: [Key: Totals] = [:]
         for turn in turns {
             let agent = turn.attributes["gen_ai.agent.name"] ?? "unknown"
             let overlappingSessions = sessions.filter { $0.end > turn.start && $0.start < turn.end }
             let projects = Set(overlappingSessions.compactMap { $0.attributes["dayglass.project"] })
             let project = projects.count == 1 ? projects.first : turn.attributes["dayglass.project"]
             let key = Key(day: dayString(turn.start), project: project, agent: agent)
-            let existing = values[key] ?? (sessions: [], turns: 0, edits: 0, input: 0, read: 0, write: 0, output: 0)
-            var updated = existing
+            var updated = values[key] ?? empty
             updated.turns += 1
             updated.edits += Int(turn.attributes["dayglass.edit_calls"] ?? "0") ?? 0 > 0 ? 1 : 0
             updated.input += integerAttribute(turn, names: ["gen_ai.usage.input_uncached", "input_uncached"])
@@ -241,7 +241,7 @@ public struct ReportEngine: Sendable {
         for session in sessions where !turns.contains(where: { $0.end > session.start && $0.start < session.end }) {
             let agent = session.attributes["gen_ai.agent.name"] ?? "unknown"
             let key = Key(day: dayString(session.start), project: session.attributes["dayglass.project"], agent: agent)
-            var existing = values[key] ?? (sessions: [], turns: 0, edits: 0, input: 0, read: 0, write: 0, output: 0)
+            var existing = values[key] ?? empty
             existing.sessions.insert(session.attributes["gen_ai.conversation.id"] ?? session.start.description)
             values[key] = existing
         }
@@ -287,7 +287,6 @@ public struct ReportEngine: Sendable {
 
     private func makeQuestions(
         candidates: [Candidate],
-        blocks: [ReportBlock],
         afk: [ObservedSpan],
         activeWindow: TimeRange?,
         focus: [ObservedSpan]
@@ -349,7 +348,8 @@ public struct ReportEngine: Sendable {
     private func neighboringProjects(candidates: [Candidate], range: TimeRange) -> [String] {
         var values = candidates.filter { $0.range.end <= range.start || $0.range.start >= range.end }.compactMap(\ .project)
         values.append(contentsOf: configuration.projects.map(\ .code))
-        return Array(NSOrderedSet(array: values)) as? [String] ?? []
+        var seen: Set<String> = []
+        return values.filter { seen.insert($0).inserted }
     }
 
     private func latestNote(overlapping range: TimeRange) -> NoteRecord? {
@@ -366,8 +366,8 @@ public struct ReportEngine: Sendable {
 }
 
 private func integerAttribute(_ span: ObservedSpan, names: [String]) -> Int {
-    for name in names where span.attributes[name] != nil {
-        return Int(span.attributes[name]!) ?? 0
+    for name in names {
+        if let value = span.attributes[name] { return Int(value) ?? 0 }
     }
     return 0
 }
@@ -409,25 +409,13 @@ private struct Candidate: Sendable {
 private struct ProjectAssignment {
     let code: String?
     let basis: String
-    let ambiguous: Bool
-
-    init(code: String?, basis: String, ambiguous: Bool = false) {
-        self.code = code
-        self.basis = basis
-        self.ambiguous = ambiguous
-    }
+    var ambiguous: Bool = false
 }
 
 private struct CategoryAssignment {
     let category: WorkCategory
     let basis: String
-    let ambiguous: Bool
-
-    init(category: WorkCategory, basis: String, ambiguous: Bool = false) {
-        self.category = category
-        self.basis = basis
-        self.ambiguous = ambiguous
-    }
+    var ambiguous: Bool = false
 }
 
 private struct TimeRange: Equatable, Sendable {
