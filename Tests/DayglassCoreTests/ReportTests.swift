@@ -86,7 +86,7 @@ import Testing
         )
         let result = ReportEngine(
             input: ReportInput(spans: [focus]),
-            configuration: ReportConfiguration(calendar: utcCalendar())
+            configuration: ReportConfiguration(timeZone: .gmt)
         ).build()
 
         #expect(result.time.map(\.day) == ["2026-09-14", "2026-09-15"])
@@ -181,10 +181,4 @@ import Testing
 private func date(_ value: String) -> Date {
     let formatter = ISO8601DateFormatter()
     return formatter.date(from: value)!
-}
-
-private func utcCalendar() -> Calendar {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC")!
-    return calendar
 }

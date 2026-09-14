@@ -109,18 +109,20 @@ public struct ReportConfiguration: Sendable {
     public var projects: [ProjectRule]
     public var categories: [CategoryRule]
     public var thresholds: ReportThresholds
-    public var calendar: Calendar
+    public var timeZone: TimeZone
+
+    public var calendar: Calendar { DayglassCalendar.gregorian(in: timeZone) }
 
     public init(
         projects: [ProjectRule] = [],
         categories: [CategoryRule] = [],
         thresholds: ReportThresholds = ReportThresholds(),
-        calendar: Calendar = DayglassCalendar.local
+        timeZone: TimeZone = .current
     ) {
         self.projects = projects
         self.categories = categories
         self.thresholds = thresholds
-        self.calendar = calendar
+        self.timeZone = timeZone
     }
 }
 

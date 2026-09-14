@@ -4,9 +4,9 @@ public struct ObservationStore: Sendable {
     private let root: URL
     private var calendar: Calendar
 
-    public init(root: URL, calendar: Calendar = DayglassCalendar.local) {
+    public init(root: URL, timeZone: TimeZone = .current) {
         self.root = root
-        self.calendar = calendar
+        self.calendar = DayglassCalendar.gregorian(in: timeZone)
     }
 
     public func load(month: String) throws -> ReportInput {

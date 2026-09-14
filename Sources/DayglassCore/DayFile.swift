@@ -12,9 +12,9 @@ public final class DayFile: @unchecked Sendable {
     private var calendar: Calendar
     private let fileManager = FileManager.default
 
-    public init(root: URL, calendar: Calendar = DayglassCalendar.local) {
+    public init(root: URL, timeZone: TimeZone = .current) {
         self.root = root
-        self.calendar = calendar
+        self.calendar = DayglassCalendar.gregorian(in: timeZone)
     }
 
     public func fileURL(signal: OTLPFileSignal, at date: Date) -> URL {

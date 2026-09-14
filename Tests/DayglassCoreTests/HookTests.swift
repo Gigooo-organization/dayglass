@@ -26,7 +26,7 @@ import Testing
         try recorder.record(HookEvent(tool: .claude, kind: .turnEnd, rawName: "Stop", timestamp: start.addingTimeInterval(120), sessionID: "s-1"))
         try recorder.record(HookEvent(tool: .claude, kind: .sessionEnd, rawName: "SessionEnd", timestamp: start.addingTimeInterval(180), sessionID: "s-1"))
 
-        let input = try ObservationStore(root: root.appendingPathComponent("otlp"), calendar: utcCalendar()).load(month: "2026-09")
+        let input = try ObservationStore(root: root.appendingPathComponent("otlp"), timeZone: .gmt).load(month: "2026-09")
         #expect(input.spans.map(\.name).sorted() == ["gen_ai.session", "gen_ai.turn"])
         #expect(input.logs.count == 4)
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("state/hooks/claude-s-1.json").path))
@@ -35,10 +35,4 @@ import Testing
 
 private func date(_ value: String) -> Date {
     ISO8601DateFormatter().date(from: value)!
-}
-
-private func utcCalendar() -> Calendar {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC")!
-    return calendar
 }

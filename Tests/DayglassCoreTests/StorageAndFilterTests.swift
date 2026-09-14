@@ -32,7 +32,7 @@ import Testing
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let dayFile = DayFile(root: root, calendar: Calendar(identifier: .gregorian))
+        let dayFile = DayFile(root: root, timeZone: .gmt)
         let date = try #require(ISO8601DateFormatter().date(from: "2026-09-14T01:02:03Z"))
 
         try dayFile.append("{\"ok\":true}", signal: .traces, at: date)

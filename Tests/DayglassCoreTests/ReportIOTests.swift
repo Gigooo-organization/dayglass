@@ -7,7 +7,7 @@ import Testing
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let dayFile = DayFile(root: root, calendar: utcCalendar())
+        let dayFile = DayFile(root: root, timeZone: .gmt)
         let date = date("2026-09-14T09:00:00Z")
         let span = OTLPSpan(
             name: "focus",
@@ -17,8 +17,8 @@ import Testing
         )
         try dayFile.append(try OTLPJSONL.traceLine(span: span), signal: .traces, at: date)
 
-        let input = try ObservationStore(root: root, calendar: utcCalendar()).load(month: "2026-09")
-        let result = ReportEngine(input: input, configuration: ReportConfiguration(calendar: utcCalendar())).build()
+        let input = try ObservationStore(root: root, timeZone: .gmt).load(month: "2026-09")
+        let result = ReportEngine(input: input, configuration: ReportConfiguration(timeZone: .gmt)).build()
         let csv = try ReportRenderer.render(result, format: .csv)
 
         #expect(input.spans.count == 1)
@@ -70,10 +70,4 @@ import Testing
 
 private func date(_ value: String) -> Date {
     ISO8601DateFormatter().date(from: value)!
-}
-
-private func utcCalendar() -> Calendar {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC")!
-    return calendar
 }

@@ -47,17 +47,18 @@ import Testing
         #expect(configuration.categories.first?.domains == ["reviews.example.com"])
     }
 
-    // A Mac set to the Japanese calendar makes Calendar.current count Reiwa
-    // years, which stamps every report row for 2026-09-14 as 0008-09-14 and
-    // breaks month matching against the requested YYYY-MM.
-    @Test func loadsTheGregorianCalendarRatherThanTheSystemOne() throws {
+    // The time zone is the only axis a caller may bend. A Mac set to the
+    // Japanese calendar counts Reiwa years, which would stamp 2026-09-14 as
+    // 0008-09-14 and break every YYYY-MM match downstream.
+    @Test func keepsDaysGregorianWhileHonouringTheRequestedTimeZone() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("dayglass-\(UUID().uuidString).toml")
         defer { try? FileManager.default.removeItem(at: url) }
         try "".write(to: url, atomically: true, encoding: .utf8)
 
-        let configuration = try ReportConfiguration.loadTOML(from: url)
+        let configuration = try ReportConfiguration.loadTOML(from: url, timeZone: .gmt)
 
         #expect(configuration.calendar.identifier == .gregorian)
+        #expect(configuration.calendar.timeZone == .gmt)
     }
 }
