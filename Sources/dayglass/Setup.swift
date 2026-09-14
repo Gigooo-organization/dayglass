@@ -80,7 +80,7 @@ final class SetupCoordinator {
 
         [otel]
         exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "json" } }
-        metrics_exporter = "otlp-http"
+        metrics_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/metrics", protocol = "json" } }
         """
         try (existing + block).write(to: codexURL, atomically: true, encoding: .utf8)
     }

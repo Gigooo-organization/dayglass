@@ -152,7 +152,9 @@ Apple Silicon Mac を利用するチームメンバー全員に配布し、各�
   `OTEL_METRICS_EXPORTER=otlp`, `OTEL_LOGS_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/json`,
   `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318` を指定
 - Codex: `config.toml` の `[otel]` で `exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "json" } }` を指定。
-  `metrics_exporter` はデフォルトが OpenAI 宛て（statsig）となっているため、明示的に `otlp-http` を指定する
+  `metrics_exporter` はデフォルトが OpenAI 宛て（statsig）となっているため、
+  `metrics_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/metrics", protocol = "json" } }` を明示的に指定する。
+  Codex v0.154.0 では `metrics_exporter = "otlp-http"`（文字列形式）は設定読み込みエラーになる
 
 **受信したペイロードをそのまま保存することはない**。下記の許可リストに定義されたレコードのうち、指定された属性のみを抽出し、該当日の `logs.jsonl` / `metrics.jsonl` / `traces.jsonl` に書き込む。許可リストに含まれないデータは破棄し、件数のみを記録する。
 
