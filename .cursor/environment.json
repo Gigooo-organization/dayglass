@@ -1,0 +1,5 @@
+{
+  "name": "dayglass (Swift 6.0, Linux)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
