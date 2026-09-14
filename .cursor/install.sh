@@ -16,11 +16,12 @@ SWIFT_PREFIX="/opt/swift"
 if [ ! -x "${SWIFT_PREFIX}/usr/bin/swift" ]; then
   echo "Installing Swift ${SWIFT_RELEASE} toolchain..."
 
-  ubuntu_version="$(. /etc/os-release && echo "${VERSION_ID}")"   # e.g. 24.04
-  ubuntu_tag="ubuntu$(echo "${ubuntu_version}" | tr -d '.')"       # e.g. ubuntu2404
+  ubuntu_version="$(. /etc/os-release && echo "${VERSION_ID}")"    # e.g. 24.04
+  ubuntu_path="ubuntu$(echo "${ubuntu_version}" | tr -d '.')"       # URL path: ubuntu2404
+  ubuntu_file="ubuntu${ubuntu_version}"                             # file name: ubuntu24.04
   release_dir="$(echo "${SWIFT_RELEASE}" | tr '[:upper:]' '[:lower:]')"
-  tarball="${SWIFT_RELEASE}-${ubuntu_tag}.tar.gz"
-  url="https://download.swift.org/${release_dir}/${ubuntu_tag}/${SWIFT_RELEASE}/${tarball}"
+  tarball="${SWIFT_RELEASE}-${ubuntu_file}.tar.gz"
+  url="https://download.swift.org/${release_dir}/${ubuntu_path}/${SWIFT_RELEASE}/${tarball}"
 
   sudo apt-get update -y
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
