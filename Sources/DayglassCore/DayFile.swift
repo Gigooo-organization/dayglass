@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 import Foundation
 
 public enum OTLPFileSignal: String, CaseIterable, Codable, Sendable {
@@ -113,7 +117,12 @@ public final class Sink: @unchecked Sendable {
             buffer.copyBytes(from: bytes)
         }
 
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        #if canImport(Darwin)
+        let streamType = SOCK_STREAM
+        #else
+        let streamType = Int32(SOCK_STREAM.rawValue)
+        #endif
+        let fd = socket(AF_UNIX, streamType, 0)
         guard fd >= 0 else { return false }
         defer { close(fd) }
         let connected = withUnsafePointer(to: &address) { pointer in
