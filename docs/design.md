@@ -183,7 +183,7 @@ Apple Silicon Mac を利用するチームメンバー全員に配布し、各�
 | 共通で取れるもの | `session_id`, `cwd`, `transcript_path` | 同左 ＋ `model`, `turn_id` |
 | 設定場所 | `~/.claude/settings.json` の `hooks` | `~/.codex/hooks.json`（`[features] hooks = true`、`/hooks` で信頼登録） |
 
-どちらも `dayglass hook <tool>` を非同期（`async`）で呼び出す。hook は標準入力から渡される JSON を読み取り、前述の定義に従って正規化した上で `gen_ai.session` / `gen_ai.turn` の開始・終了を記録する。**非同期実行により、エージェント自体の応答処理をブロック・遅延させない**設計とする。
+どちらも `dayglass hook <tool>` を非同期（`async`）で呼び出す。hook は標準入力から渡される JSON を読み取り、前述の定義に従って正規化した上で `gen_ai.session` / `gen_ai.turn` の開始・終了を記録する。**非同期実行により、エージェント自体の応答処理をブロック・遅延させない**設計とする。SessionStart のみ同期（`async: false`）で呼び、直近 7 日に未回答があれば `additionalContext` を 1 行返す。
 
 なお、Codex の `notify` 機構はレガシー仕様（将来的に削除予定）であるため使用しない。
 

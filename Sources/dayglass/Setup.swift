@@ -37,8 +37,14 @@ final class SetupCoordinator {
             var hooks = try object(root["hooks"], key: "hooks", path: claudeURL)
             for event in hookEvents {
                 var entries = try array(hooks[event], key: event, path: claudeURL)
-                guard !entries.contains(where: containsDayglassHook) else { continue }
-                entries.append(["hooks": [["type": "command", "command": "dayglass hook claude", "async": true]]])
+                // additionalContext is dropped when SessionStart runs async.
+                let asynchronous = event != "SessionStart"
+                if !asynchronous {
+                    entries = entries.map { setDayglassAsync($0, asynchronous: false) }
+                }
+                if !entries.contains(where: containsDayglassHook) {
+                    entries.append(["hooks": [["type": "command", "command": "dayglass hook claude", "async": asynchronous]]])
+                }
                 hooks[event] = entries
             }
             root["hooks"] = hooks
@@ -52,8 +58,14 @@ final class SetupCoordinator {
             var hooks = try object(root["hooks"], key: "hooks", path: codexURL)
             for event in hookEvents {
                 var entries = try array(hooks[event], key: event, path: codexURL)
-                guard !entries.contains(where: containsDayglassHook) else { continue }
-                entries.append(["command": "dayglass hook codex", "async": true])
+                // Same synchronous SessionStart as Claude. Codex may ignore additionalContext.
+                let asynchronous = event != "SessionStart"
+                if !asynchronous {
+                    entries = entries.map { setDayglassAsync($0, asynchronous: false) }
+                }
+                if !entries.contains(where: containsDayglassHook) {
+                    entries.append(["command": "dayglass hook codex", "async": asynchronous])
+                }
                 hooks[event] = entries
             }
             root["hooks"] = hooks
@@ -254,6 +266,26 @@ final class SetupCoordinator {
         return false
     }
 
+    /// Re-running setup flips an existing SessionStart entry to synchronous
+    /// instead of appending a second hook.
+    private func setDayglassAsync(_ entry: [String: Any], asynchronous: Bool) -> [String: Any] {
+        var entry = entry
+        if let command = entry["command"] as? String, command.contains("dayglass hook") {
+            entry["async"] = asynchronous
+        }
+        if var hooks = entry["hooks"] as? [[String: Any]] {
+            hooks = hooks.map { hook in
+                var hook = hook
+                if let command = hook["command"] as? String, command.contains("dayglass hook") {
+                    hook["async"] = asynchronous
+                }
+                return hook
+            }
+            entry["hooks"] = hooks
+        }
+        return entry
+    }
+
     /// launchd hands an agent a bare `/usr/bin:/bin:/usr/sbin:/sbin`, so `gh`
     /// and `git` from Homebrew, Nix, or mise are simply missing. Copy the PATH
     /// that setup itself was run with, which is the one that found dayglass.
@@ -349,6 +381,14 @@ description: Review and freeze a dayglass work report.
 10. Run `dayglass report --freeze --format csv` and ask the user to inspect and submit it manually.
 
 Never invent candidates, treat a gap as a meeting, or send raw logs. Only the user's explicit answer may add a project or category, and only the user edits `projects.toml`.
+
+## Recent days
+
+A session can cover just the trailing days and then stop:
+
+- Run `dayglass report --days N --questions` to list unresolved ranges from the last N local days, including today. The SessionStart reminder uses N = 7.
+- Ask only 1 to 3 of those questions, in date order, then stop.
+- Record every answer with `dayglass note --question` (or `--skip`). Do not invent another place to store answers.
 """
 
 private let dayglassSearchSkill = """
