@@ -372,8 +372,8 @@ description: Review and freeze a dayglass work report.
 3. Record each answer immediately with `dayglass note --question`.
 4. Ask once about meetings outside Zoom, Meet, or Teams and record explicit times. Do not ask about intervals already covered by an `audio` span.
 5. Re-run the report and show the remaining unassigned seconds.
-6. When the same repository, host, or application needed the same answer more than once this
-   month, show the `projects.toml` rule that would have answered it and ask whether to add it.
+6. Run `dayglass report --suggest-rules --month YYYY-MM` and present its JSON Lines output.
+   Each line proposes a `projects.toml` rule. Ask whether to add it.
    Rules apply retroactively, so offer this before freezing. Let the user edit the file.
 7. Run `dayglass evidence --day YYYY-MM-DD` for bounded, redacted request/outcome material.
 8. Draft one to three lines per project; keep repository names and PR numbers unchanged. Cite on each line the minutes from that day's `time` table that the line is based on. Per-project minute totals must equal that day's `time` table total. Do not write outcomes that are not in `evidence`. If a request exists but no result is confirmed, say started or in progress, and do not claim completion. If the totals do not match, delete lines or fix the minutes. Never change the `time` table to make the draft match.
