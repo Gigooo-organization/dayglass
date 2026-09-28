@@ -10,13 +10,22 @@ public struct ObservationStore: Sendable {
     }
 
     public func load(month: String) throws -> ReportInput {
+        try load { $0.hasPrefix(month) }
+    }
+
+    /// Reads only the named `yyyy-MM-dd` folders. A day with no directory adds nothing.
+    public func load(days: Set<String>) throws -> ReportInput {
+        try load { days.contains($0) }
+    }
+
+    private func load(including nameMatches: (String) -> Bool) throws -> ReportInput {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: root.path) else { return ReportInput() }
         var spans: [ObservedSpan] = []
         var logs: [ObservedLog] = []
         for folder in try fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
             let name = folder.lastPathComponent
-            guard name.hasPrefix(month), (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+            guard nameMatches(name), (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
             let day = dayStart(from: name) ?? Date.distantPast
             for signal in [OTLPFileSignal.traces, .logs] {
                 let url = folder.appendingPathComponent("\(signal.rawValue).jsonl")

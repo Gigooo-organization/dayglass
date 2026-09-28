@@ -9,6 +9,9 @@ import Testing
         let report = try #require(CLIHelp.text(for: "report"))
         #expect(report.contains("--format FORMAT"))
         #expect(report.contains("--questions"))
+        #expect(report.contains("--days N"))
+        let hook = try #require(CLIHelp.text(for: "hook"))
+        #expect(hook.contains("additionalContext"))
         #expect(CLIHelp.text(for: "unknown") == nil)
     }
 }
