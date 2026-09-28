@@ -115,7 +115,15 @@ func report(_ options: CLIOptions) throws {
         fputs("dayglass: github sync skipped: \(error)\n", stderr)
     }
     let month = options.value("month") ?? monthString(Date())
-    let result = try loadResult(month: month)
+    let result: ReportResult
+    if let daysValue = options.value("days") {
+        guard let days = Int(daysValue), days > 0 else {
+            throw DayglassCLIError.usage("--days requires a positive integer")
+        }
+        result = try loadRecentResult(days: days, now: Date())
+    } else {
+        result = try loadResult(month: month)
+    }
     if options.has("questions") {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -199,6 +207,22 @@ func hook(_ options: CLIOptions) throws {
     let payload = FileHandle.standardInput.readDataToEndOfFile()
     let event = try HookDecoder.decode(tool: tool, data: payload)
     try HookRecorder(dataRoot: defaultDataRoot).record(event)
+    // additionalContext is only delivered by a synchronous SessionStart hook.
+    // Other events stay quiet on stdout. A report failure must not fail the session.
+    guard event.kind == .sessionStart else { return }
+    do {
+        let result = try loadRecentResult(days: SessionStartQuestions.defaultDays, now: event.timestamp)
+        if let line = SessionStartQuestions.stdout(
+            questions: result.questions,
+            now: event.timestamp,
+            days: SessionStartQuestions.defaultDays,
+            calendar: DayglassCalendar.local
+        ) {
+            print(line)
+        }
+    } catch {
+        fputs("dayglass: session start questions skipped: \(error)\n", stderr)
+    }
 }
 
 func pause(_ options: CLIOptions) throws {
@@ -238,13 +262,29 @@ func setup(_ options: CLIOptions) throws {
 
 func loadResult(month: String) throws -> ReportResult {
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(month: month)
+    let notes = try NoteStore(root: defaultDataRoot).load(month: month)
+    return ReportEngine(input: input, configuration: try loadConfiguration(), notes: notes).build()
+}
+
+func loadRecentResult(days: Int, now: Date) throws -> ReportResult {
+    let calendar = DayglassCalendar.local
+    let names = SessionStartQuestions.dayFolderNames(days: days, endingAt: now, calendar: calendar)
+    let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(days: Set(names))
+    var notes: [NoteRecord] = []
+    for month in Set(names.map { String($0.prefix(7)) }).sorted() {
+        notes.append(contentsOf: try NoteStore(root: defaultDataRoot).load(month: month))
+    }
+    let built = ReportEngine(input: input, configuration: try loadConfiguration(), notes: notes).build()
+    let questions = SessionStartQuestions.filter(built.questions, days: days, endingAt: now, calendar: calendar)
+    return ReportResult(time: built.time, ai: built.ai, output: built.output, blocks: built.blocks, questions: questions)
+}
+
+func loadConfiguration() throws -> ReportConfiguration {
     let configurationURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/dayglass/projects.toml")
-    let configuration = FileManager.default.fileExists(atPath: configurationURL.path)
+    return FileManager.default.fileExists(atPath: configurationURL.path)
         ? try ReportConfiguration.loadTOML(from: configurationURL)
         : ReportConfiguration()
-    let notes = try NoteStore(root: defaultDataRoot).load(month: month)
-    return ReportEngine(input: input, configuration: configuration, notes: notes).build()
 }
 
 func freeze(result: ReportResult, month: String) throws -> URL {
