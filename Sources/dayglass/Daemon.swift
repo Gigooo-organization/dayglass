@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreAudio
 import Darwin
 import DayglassCore
 import Foundation
@@ -46,6 +47,7 @@ final class DayglassDaemon: @unchecked Sendable {
         var tracker = FocusTracker()
         var afkStart: Date?
         var afkReason = "idle"
+        var audioStart: Date?
         var stopped = false
         let signalSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         signalSource.setEventHandler { stopped = true }
@@ -82,11 +84,14 @@ final class DayglassDaemon: @unchecked Sendable {
             } else if let snapshot = windowMonitor.snapshot() {
                 try tracker.update(snapshot, at: now).forEach(write)
             }
+            let inputRunning = !paused && InputDeviceMonitor.inputIsRunning()
+            try syncInputAudio(at: now, running: inputRunning, audioStart: &audioStart)
             runSpan = ObservedSpan(name: "dayglass.run", start: started, end: now)
             RunLoop.current.run(until: Date().addingTimeInterval(5))
         }
 
         let ended = Date()
+        try syncInputAudio(at: ended, running: false, audioStart: &audioStart)
         if let afkStart, ended > afkStart {
             try write(ObservedSpan(name: "afk", start: afkStart, end: ended, attributes: ["dayglass.afk.reason": afkReason]))
         }
@@ -97,6 +102,19 @@ final class DayglassDaemon: @unchecked Sendable {
         socketServer.stop()
         signalSource.cancel()
         termSource.cancel()
+    }
+
+    /// Opens or closes an `audio` span from the input-running boolean. The span has
+    /// no attributes: device names and samples are not recorded.
+    private func syncInputAudio(at now: Date, running: Bool, audioStart: inout Date?) throws {
+        if running {
+            if audioStart == nil { audioStart = now }
+            return
+        }
+        if let start = audioStart, now > start {
+            try write(ObservedSpan(name: "audio", start: start, end: now))
+        }
+        audioStart = nil
     }
 
     private func write(_ span: ObservedSpan) throws {
@@ -112,6 +130,60 @@ final class DayglassDaemon: @unchecked Sendable {
 
     private func writeLog(_ name: String, at date: Date) throws {
         try dayFile.append(try OTLPJSONL.logLine(eventName: name, at: date), signal: .logs, at: date)
+    }
+}
+
+/// True when any input-capable device is running somewhere on the system.
+/// Output-only devices are ignored, so music playback does not open an `audio` span.
+/// `kAudioDevicePropertyDeviceIsRunningSomewhere` is a single boolean; nothing else is read.
+private enum InputDeviceMonitor {
+    static func inputIsRunning() -> Bool {
+        devices().contains { hasInputStream($0) && isRunningSomewhere($0) }
+    }
+
+    private static func devices() -> [AudioDeviceID] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
+        let count = Int(size) / MemoryLayout<AudioDeviceID>.stride
+        guard count > 0 else { return [] }
+        let identifiers = UnsafeMutablePointer<AudioDeviceID>.allocate(capacity: count)
+        defer { identifiers.deallocate() }
+        var readSize = UInt32(MemoryLayout<AudioDeviceID>.stride * count)
+        let status = AudioObjectGetPropertyData(system, &address, 0, nil, &readSize, UnsafeMutableRawPointer(identifiers))
+        guard status == noErr else { return [] }
+        let reported = Int(readSize) / MemoryLayout<AudioDeviceID>.stride
+        return Array(UnsafeBufferPointer(start: identifiers, count: max(0, min(reported, count))))
+    }
+
+    private static func hasInputStream(_ device: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: kAudioObjectPropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        let status = AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size)
+        return status == noErr && size >= UInt32(MemoryLayout<AudioStreamID>.size)
+    }
+
+    private static func isRunningSomewhere(_ device: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let running = UnsafeMutablePointer<UInt32>.allocate(capacity: 1)
+        defer { running.deallocate() }
+        running.pointee = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, UnsafeMutableRawPointer(running))
+        return status == noErr && running.pointee != 0
     }
 }
 

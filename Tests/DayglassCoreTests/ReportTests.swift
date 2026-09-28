@@ -232,6 +232,204 @@ import Testing
         #expect(row.confidence == "confirmed")
         #expect(result.questions.isEmpty)
     }
+
+    @Test func afkCoveredByAudioIsAMeetingAndNotAGap() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T10:00:00Z"),
+            attributes: ["app.name": "Terminal", "app.bundle_id": "com.apple.Terminal"]
+        )
+        let afk = ObservedSpan(
+            name: "afk",
+            start: date("2026-09-14T09:20:00Z"),
+            end: date("2026-09-14T09:50:00Z"),
+            attributes: ["dayglass.afk.reason": "idle"]
+        )
+        let audio = ObservedSpan(
+            name: "audio",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T10:00:00Z")
+        )
+        let result = ReportEngine(input: ReportInput(spans: [focus, afk, audio])).build()
+
+        #expect(result.blocks.map(\.category) == ["coding", "meeting", "coding"])
+        #expect(result.blocks.map(\.categoryBasis) == ["bundle", "audio", "bundle"])
+        #expect(result.blocks.map(\.confidence) == ["unassigned", "inferred", "unassigned"])
+        let meeting = try #require(result.blocks.first { $0.category == "meeting" })
+        #expect(meeting.start == afk.start)
+        #expect(meeting.end == afk.end)
+        #expect(meeting.projectBasis == "none")
+        #expect(!result.questions.contains { $0.kind == "gap" })
+    }
+
+    @Test func pausedAfkOverlappingAudioStaysOutOfMeetingsAndGaps() {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T10:00:00Z"),
+            attributes: ["app.name": "Terminal", "app.bundle_id": "com.apple.Terminal"]
+        )
+        let afk = ObservedSpan(
+            name: "afk",
+            start: date("2026-09-14T09:20:00Z"),
+            end: date("2026-09-14T09:50:00Z"),
+            attributes: ["dayglass.afk.reason": "paused"]
+        )
+        let audio = ObservedSpan(
+            name: "audio",
+            start: focus.start,
+            end: focus.end
+        )
+        let result = ReportEngine(input: ReportInput(spans: [focus, afk, audio])).build()
+
+        #expect(result.blocks.map(\.category) == ["coding", "coding"])
+        #expect(!result.blocks.contains { $0.categoryBasis == "audio" })
+        #expect(!result.questions.contains { $0.kind == "gap" })
+    }
+
+    @Test func afkOutsideAudioStillAsksAGap() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T11:00:00Z"),
+            attributes: [
+                "app.name": "Google Chrome",
+                "app.bundle_id": "com.google.Chrome",
+                "url.domain": "example.com",
+            ]
+        )
+        let afk = ObservedSpan(
+            name: "afk",
+            start: date("2026-09-14T09:10:00Z"),
+            end: date("2026-09-14T10:10:00Z"),
+            attributes: ["dayglass.afk.reason": "idle"]
+        )
+        let audio = ObservedSpan(
+            name: "audio",
+            start: date("2026-09-14T09:10:00Z"),
+            end: date("2026-09-14T09:30:00Z")
+        )
+        let result = ReportEngine(input: ReportInput(spans: [focus, afk, audio])).build()
+
+        let gap = try #require(result.questions.first { $0.kind == "gap" })
+        #expect(result.questions.filter { $0.kind == "gap" }.count == 1)
+        #expect(gap.start == audio.end)
+        #expect(gap.end == afk.end)
+        #expect(gap.seconds == 40 * 60)
+        let meeting = try #require(result.blocks.first { $0.category == "meeting" })
+        #expect(meeting.start == audio.start)
+        #expect(meeting.end == audio.end)
+        #expect(meeting.categoryBasis == "audio")
+        #expect(meeting.confidence == "inferred")
+    }
+
+    @Test func docsOverlappingAudioPreferMeetingAndKeepAudioBasis() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T09:30:00Z"),
+            attributes: ["app.name": "Notion", "window.title": "spec"]
+        )
+        let audio = ObservedSpan(name: "audio", start: focus.start, end: focus.end)
+        let result = ReportEngine(
+            input: ReportInput(spans: [focus, audio]),
+            configuration: ReportConfiguration(projects: [ProjectRule(code: "PJ-A", title: ["spec"])])
+        ).build()
+
+        let block = try #require(result.blocks.first)
+        #expect(result.blocks.count == 1)
+        #expect(block.category == "meeting")
+        #expect(block.categoryBasis == "audio")
+        #expect(block.confidence == "inferred")
+        #expect(block.project == "PJ-A")
+        let row = try #require(result.time.first { $0.category == "meeting" })
+        #expect(row.categoryBasis == "audio")
+        #expect(row.confidence == "inferred")
+        #expect(row.seconds == 1800)
+    }
+
+    @Test func docsOverlapWithAudioSplitsTheBlock() {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T10:00:00Z"),
+            attributes: ["app.name": "Notion", "window.title": "spec"]
+        )
+        let audio = ObservedSpan(
+            name: "audio",
+            start: date("2026-09-14T09:15:00Z"),
+            end: date("2026-09-14T09:45:00Z")
+        )
+        let result = ReportEngine(
+            input: ReportInput(spans: [focus, audio]),
+            configuration: ReportConfiguration(projects: [ProjectRule(code: "PJ-A", title: ["spec"])])
+        ).build()
+
+        #expect(result.blocks.map(\.category) == ["docs", "meeting", "docs"])
+        #expect(result.blocks.map(\.categoryBasis) == ["bundle", "audio", "bundle"])
+        #expect(result.blocks.allSatisfy { $0.confidence == "inferred" && $0.project == "PJ-A" })
+        #expect(result.blocks.map { Int($0.end.timeIntervalSince($0.start)) } == [900, 1800, 900])
+    }
+
+    @Test func audioDoesNotReclassifyCodingOrAnAppMeeting() {
+        let coding = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T11:00:00Z"),
+            end: date("2026-09-14T11:30:00Z"),
+            attributes: ["app.name": "Terminal", "app.bundle_id": "com.apple.Terminal"]
+        )
+        let zoom = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T12:00:00Z"),
+            end: date("2026-09-14T12:30:00Z"),
+            attributes: ["app.name": "Zoom", "app.bundle_id": "us.zoom.xos"]
+        )
+        let audio = [
+            ObservedSpan(name: "audio", start: coding.start, end: coding.end),
+            ObservedSpan(name: "audio", start: zoom.start, end: zoom.end),
+        ]
+        let result = ReportEngine(input: ReportInput(spans: [coding, zoom] + audio)).build()
+
+        #expect(result.blocks.map(\.category) == ["coding", "meeting"])
+        #expect(result.blocks.map(\.categoryBasis) == ["bundle", "bundle"])
+    }
+
+    @Test func aNoteStillOverridesAnAudioMeeting() throws {
+        let focus = ObservedSpan(
+            name: "focus",
+            start: date("2026-09-14T09:00:00Z"),
+            end: date("2026-09-14T09:30:00Z"),
+            attributes: ["app.name": "Notion", "window.title": "spec"]
+        )
+        let audio = ObservedSpan(name: "audio", start: focus.start, end: focus.end)
+        let note = NoteRecord(start: focus.start, end: focus.end, project: "PJ-NOTE", category: "research")
+        let result = ReportEngine(input: ReportInput(spans: [focus, audio]), notes: [note]).build()
+        let block = try #require(result.blocks.first)
+
+        #expect(block.category == "research")
+        #expect(block.categoryBasis == "note")
+        #expect(block.confidence == "confirmed")
+        #expect(block.project == "PJ-NOTE")
+    }
+
+    @Test func splitsAnAudioMeetingAtLocalMidnight() {
+        let afk = ObservedSpan(
+            name: "afk",
+            start: date("2026-09-14T23:40:00Z"),
+            end: date("2026-09-15T00:20:00Z"),
+            attributes: ["dayglass.afk.reason": "idle"]
+        )
+        let audio = ObservedSpan(name: "audio", start: afk.start, end: afk.end)
+        let result = ReportEngine(
+            input: ReportInput(spans: [afk, audio]),
+            configuration: ReportConfiguration(timeZone: .gmt)
+        ).build()
+
+        #expect(result.blocks.map(\.category) == ["meeting", "meeting"])
+        #expect(result.blocks.allSatisfy { $0.categoryBasis == "audio" && $0.confidence == "inferred" })
+        #expect(result.time.map(\.day) == ["2026-09-14", "2026-09-15"])
+    }
 }
 
 private func date(_ value: String) -> Date {

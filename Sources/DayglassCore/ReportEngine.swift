@@ -18,6 +18,7 @@ public struct ReportEngine: Sendable {
     public func build() -> ReportResult {
         let focus = input.spans.filter { $0.name == "focus" && $0.end > $0.start }
         let afk = input.spans.filter { $0.name == "afk" && $0.end > $0.start }
+        let audio = input.spans.filter { $0.name == "audio" && $0.end > $0.start }
         let turns = input.spans.filter { $0.name == "gen_ai.turn" && $0.end > $0.start }
         let sessions = input.spans.filter { $0.name == "gen_ai.session" && $0.end > $0.start }
         let activeWindow = focus.reduce(into: Optional<TimeRange>.none) { result, span in
@@ -34,29 +35,15 @@ public struct ReportEngine: Sendable {
             for dayRange in splitByDay(TimeRange(start: span.start, end: span.end), calendar: configuration.calendar) {
                 let cuts = afk.filter { $0.end > dayRange.start && $0.start < dayRange.end }
                 for range in subtract(TimeRange(start: dayRange.start, end: dayRange.end), by: cuts.map { TimeRange(start: $0.start, end: $0.end) }) {
-                    guard let note = latestNote(overlapping: range) else {
-                        candidates.append(makeCandidate(
-                            focus: span,
-                            range: range,
-                            turns: turns,
-                            sessions: sessions
-                        ))
-                        continue
+                    for piece in classifiedPieces(focus: span, range: range, turns: turns, sessions: sessions, audio: audio) {
+                        if let candidate = apply(latestNote(overlapping: piece.range), to: piece) {
+                            candidates.append(candidate)
+                        }
                     }
-                    if note.skip { continue }
-                    let inferred = makeCandidate(focus: span, range: range, turns: turns, sessions: sessions)
-                    candidates.append(
-                        inferred.with(
-                            project: note.project ?? inferred.project,
-                            category: note.category.flatMap(WorkCategory.init(rawValue:))?.rawValue ?? inferred.category,
-                            projectBasis: note.project == nil ? inferred.projectBasis : "note",
-                            categoryBasis: note.category == nil ? inferred.categoryBasis : "note",
-                            confidence: "confirmed"
-                        )
-                    )
                 }
             }
         }
+        candidates.append(contentsOf: afkAudioMeetings(afk: afk, audio: audio, turns: turns))
 
         let blocks = candidates.map { candidate in
             ReportBlock(
@@ -76,6 +63,7 @@ public struct ReportEngine: Sendable {
         let questions = makeQuestions(
             candidates: candidates,
             afk: afk,
+            audio: audio,
             activeWindow: activeWindow,
             focus: focus
         )
@@ -108,6 +96,76 @@ public struct ReportEngine: Sendable {
             categoryAmbiguous: category.ambiguous,
             title: focus.attributes["window.title"],
             aiSeconds: overlapSeconds(range, with: turns)
+        )
+    }
+
+    /// `docs` that overlaps an input-device `audio` span prefers `meeting` for the
+    /// overlap only. Other categories stay put: a mic also runs for voice notes.
+    private func classifiedPieces(
+        focus: ObservedSpan,
+        range: TimeRange,
+        turns: [ObservedSpan],
+        sessions: [ObservedSpan],
+        audio: [ObservedSpan]
+    ) -> [Candidate] {
+        let inferred = makeCandidate(focus: focus, range: range, turns: turns, sessions: sessions)
+        guard inferred.category == WorkCategory.docs.rawValue else { return [inferred] }
+        let meetingRanges = overlappingRanges(range, with: audio)
+        guard !meetingRanges.isEmpty else { return [inferred] }
+        let docs = subtract(range, by: meetingRanges).map { slice in
+            inferred.replacing(range: slice, aiSeconds: overlapSeconds(slice, with: turns))
+        }
+        let meetings = meetingRanges.map { slice in
+            inferred.replacing(
+                range: slice,
+                category: WorkCategory.meeting.rawValue,
+                categoryBasis: "audio",
+                confidence: "inferred",
+                categoryAmbiguous: false,
+                aiSeconds: overlapSeconds(slice, with: turns)
+            )
+        }
+        return docs + meetings
+    }
+
+    /// Non-paused `afk` covered by `audio` is estimated as a meeting instead of
+    /// disappearing into a gap question. `confidence` stays `inferred`.
+    private func afkAudioMeetings(afk: [ObservedSpan], audio: [ObservedSpan], turns: [ObservedSpan]) -> [Candidate] {
+        let covered = merge(afk.filter { $0.attributes["dayglass.afk.reason"] != "paused" }.flatMap { span in
+            overlappingRanges(TimeRange(start: span.start, end: span.end), with: audio)
+        })
+        var candidates: [Candidate] = []
+        for range in covered {
+            for dayRange in splitByDay(range, calendar: configuration.calendar) {
+                let inferred = Candidate(
+                    range: dayRange,
+                    project: nil,
+                    category: WorkCategory.meeting.rawValue,
+                    projectBasis: "none",
+                    categoryBasis: "audio",
+                    confidence: "inferred",
+                    projectAmbiguous: false,
+                    categoryAmbiguous: false,
+                    title: nil,
+                    aiSeconds: overlapSeconds(dayRange, with: turns)
+                )
+                if let candidate = apply(latestNote(overlapping: dayRange), to: inferred) {
+                    candidates.append(candidate)
+                }
+            }
+        }
+        return candidates
+    }
+
+    private func apply(_ note: NoteRecord?, to inferred: Candidate) -> Candidate? {
+        guard let note else { return inferred }
+        if note.skip { return nil }
+        return inferred.with(
+            project: note.project ?? inferred.project,
+            category: note.category.flatMap(WorkCategory.init(rawValue:))?.rawValue ?? inferred.category,
+            projectBasis: note.project == nil ? inferred.projectBasis : "note",
+            categoryBasis: note.category == nil ? inferred.categoryBasis : "note",
+            confidence: "confirmed"
         )
     }
 
@@ -288,6 +346,7 @@ public struct ReportEngine: Sendable {
     private func makeQuestions(
         candidates: [Candidate],
         afk: [ObservedSpan],
+        audio: [ObservedSpan],
         activeWindow: TimeRange?,
         focus: [ObservedSpan]
     ) -> [ReportQuestion] {
@@ -302,7 +361,8 @@ public struct ReportEngine: Sendable {
             questions.append(question(kind: "ambiguous_category", range: candidate, options: ["coding", "review", "docs", "research"], evidence: onScreenEvidence(in: candidate, focus: focus)))
         }
         if let activeWindow {
-            for span in merge(afk.filter { $0.attributes["dayglass.afk.reason"] != "paused" }.map { TimeRange(start: max($0.start, activeWindow.start), end: min($0.end, activeWindow.end)) }.filter { $0.end > $0.start }) where Double(duration(span)) >= configuration.thresholds.gap {
+            let uncovered = uncoveredAfkRanges(afk: afk, activeWindow: activeWindow, audio: audio)
+            for span in uncovered where Double(duration(span)) >= configuration.thresholds.gap {
                 let reason = afk.first { $0.start <= span.start && $0.end >= span.end }?.attributes["dayglass.afk.reason"]
                 let options = reason == "locked" || reason == "sleep" ? ["skip", "meeting", "research"] : ["meeting", "research", "skip"]
                 questions.append(question(kind: "gap", range: span, options: options, evidence: onScreenEvidence(in: span, focus: focus)))
@@ -350,6 +410,16 @@ public struct ReportEngine: Sendable {
         values.append(contentsOf: configuration.projects.map(\ .code))
         var seen: Set<String> = []
         return values.filter { seen.insert($0).inserted }
+    }
+
+    /// `afk` inside the active window, with `audio` overlaps removed, before the gap threshold.
+    private func uncoveredAfkRanges(afk: [ObservedSpan], activeWindow: TimeRange, audio: [ObservedSpan]) -> [TimeRange] {
+        let audioRanges = audio.map { TimeRange(start: $0.start, end: $0.end) }
+        let clipped = afk
+            .filter { $0.attributes["dayglass.afk.reason"] != "paused" }
+            .map { TimeRange(start: max($0.start, activeWindow.start), end: min($0.end, activeWindow.end)) }
+            .filter { $0.end > $0.start }
+        return merge(clipped).flatMap { subtract($0, by: audioRanges) }
     }
 
     private func latestNote(overlapping range: TimeRange) -> NoteRecord? {
@@ -404,6 +474,28 @@ private struct Candidate: Sendable {
             aiSeconds: aiSeconds
         )
     }
+
+    func replacing(
+        range: TimeRange,
+        category: String? = nil,
+        categoryBasis: String? = nil,
+        confidence: String? = nil,
+        categoryAmbiguous: Bool? = nil,
+        aiSeconds: Int
+    ) -> Candidate {
+        Candidate(
+            range: range,
+            project: project,
+            category: category ?? self.category,
+            projectBasis: projectBasis,
+            categoryBasis: categoryBasis ?? self.categoryBasis,
+            confidence: confidence ?? self.confidence,
+            projectAmbiguous: projectAmbiguous,
+            categoryAmbiguous: categoryAmbiguous ?? self.categoryAmbiguous,
+            title: title,
+            aiSeconds: aiSeconds
+        )
+    }
 }
 
 private struct ProjectAssignment {
@@ -442,6 +534,15 @@ private struct RawGroup: Sendable {
 
 private func duration(_ range: TimeRange) -> Int {
     max(0, Int(range.end.timeIntervalSince(range.start).rounded()))
+}
+
+private func overlappingRanges(_ range: TimeRange, with spans: [ObservedSpan]) -> [TimeRange] {
+    merge(spans.compactMap { span in
+        let start = max(range.start, span.start)
+        let end = min(range.end, span.end)
+        guard end > start else { return nil }
+        return TimeRange(start: start, end: end)
+    })
 }
 
 private func overlapSeconds(_ range: TimeRange, with spans: [ObservedSpan]) -> Int {
