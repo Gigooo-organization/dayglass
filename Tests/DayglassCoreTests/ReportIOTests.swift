@@ -26,6 +26,20 @@ import Testing
         #expect(csv.contains("2026-09-14"))
     }
 
+    @Test func loadsOnlyTheNamedObservationDays() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dayFile = DayFile(root: root, timeZone: .gmt)
+        try dayFile.append(try OTLPJSONL.traceLine(span: focusSpan(start: "1789376400000000000")), signal: .traces, at: date("2026-09-14T09:00:00Z"))
+        try dayFile.append(try OTLPJSONL.traceLine(span: focusSpan(start: "1789462800000000000")), signal: .traces, at: date("2026-09-15T09:00:00Z"))
+
+        let input = try ObservationStore(root: root, timeZone: .gmt).load(days: ["2026-09-14"])
+
+        #expect(input.spans.count == 1)
+        #expect(input.spans[0].start == date("2026-09-14T09:00:00Z"))
+    }
+
     @Test func rendersJSONWithoutLocalTitlesWhenRequested() throws {
         let block = ReportBlock(
             start: date("2026-09-14T09:00:00Z"),
@@ -66,6 +80,15 @@ import Testing
         #expect(components.month == 9)
         #expect(components.day == 14)
     }
+}
+
+private func focusSpan(start: String) -> OTLPSpan {
+    OTLPSpan(
+        name: "focus",
+        startTimeUnixNano: start,
+        endTimeUnixNano: String(Int(start)! + 1_800_000_000_000),
+        attributes: [OTLPAttribute(key: "app.name", value: .string("Terminal"))]
+    )
 }
 
 private func date(_ value: String) -> Date {

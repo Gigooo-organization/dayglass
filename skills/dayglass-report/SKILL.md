@@ -16,3 +16,11 @@ description: Review and freeze a dayglass work report.
 9. Run `dayglass report --freeze --format csv` and ask the user to inspect and submit it manually.
 
 Never invent candidates, treat a gap as a meeting, or send raw logs. Only the user's explicit answer may add a project or category.
+
+## Recent days
+
+A session can cover just the trailing days and then stop:
+
+- Run `dayglass report --days N --questions` to list unresolved ranges from the last N local days, including today. The SessionStart reminder uses N = 7.
+- Ask only 1 to 3 of those questions, in date order, then stop.
+- Record every answer with `dayglass note --question` (or `--skip`). Do not invent another place to store answers.
