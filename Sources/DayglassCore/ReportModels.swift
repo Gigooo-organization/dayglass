@@ -91,17 +91,27 @@ public struct ReportThresholds: Equatable, Sendable {
     public var ambiguousCategory: TimeInterval
     public var gap: TimeInterval
     public var missing: TimeInterval
+    /// Times a term must occur before `report --suggest-rules` emits it.
+    /// `projects.toml` key: `suggest_occurrences` (default 2).
+    public var suggestOccurrences: Int
+    /// Distinct days a term must span before `report --suggest-rules` emits it.
+    /// `projects.toml` key: `suggest_days` (default 2).
+    public var suggestDays: Int
 
     public init(
         unassigned: TimeInterval = 15 * 60,
         ambiguousCategory: TimeInterval = 30 * 60,
         gap: TimeInterval = 20 * 60,
-        missing: TimeInterval = 20 * 60
+        missing: TimeInterval = 20 * 60,
+        suggestOccurrences: Int = 2,
+        suggestDays: Int = 2
     ) {
         self.unassigned = unassigned
         self.ambiguousCategory = ambiguousCategory
         self.gap = gap
         self.missing = missing
+        self.suggestOccurrences = suggestOccurrences
+        self.suggestDays = suggestDays
     }
 }
 
