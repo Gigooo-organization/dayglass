@@ -8,7 +8,7 @@ description: Review and freeze a dayglass work report.
 1. Run `dayglass report --month YYYY-MM --questions`.
 2. Present questions in date order, one at a time, without adding candidates.
 3. Record each answer immediately with `dayglass note --question`.
-4. Ask once about meetings outside Zoom, Meet, or Teams and record explicit times.
+4. Ask once about meetings outside Zoom, Meet, or Teams and record explicit times. Do not ask about intervals already covered by an `audio` span.
 5. Re-run the report and show the remaining unassigned seconds.
 6. Run `dayglass evidence --day YYYY-MM-DD` for bounded, redacted request/outcome material.
 7. Draft one to three lines per project; keep repository names and PR numbers unchanged.
