@@ -20,7 +20,7 @@ Apple Silicon Mac 向けのローカル完結型・工数記録および集計�
 
 収集された生ログはローカル環境（`~/Library/Application Support/dayglass/otlp/YYYY-MM-DD/`）にのみ保存され、外部サーバへ直接送信されることはありません。dayglass 自体が行う外部通信は、`gh` コマンドを経由した GitHub データの読み取りのみです。管理部への提出は、`report --freeze` により生成された集計ファイルを人間が内容確認した上で、手動で提出します。
 
-`evidence` コマンドは、ローカルのトランスクリプトからマスキング（伏字）、文字数上限、システム合成入力の除外を適用した安全な作業抜粋を生成します。Claude Code や Codex の skill を利用して対話形式で確認を行う場合、生成された `report`、未確定事項の質問、マスキング済み evidence はエージェント経由でモデル API（クラウド）へ入力として渡されます。なお、生ログやトランスクリプトの全文が skill に渡されることはありません。
+`evidence` コマンドは、ローカルのトランスクリプトからマスキング（伏字）、文字数上限、システム合成入力の除外を適用した安全な作業抜粋を生成します。Claude Code や Codex の skill を利用して対話形式で確認を行う場合、生成された `report`、未確定事項の質問、マスキング済み evidence はエージェント経由でモデル API（クラウド）へ入力として渡されます。`dayglass report --suggest-rules` の JSON Lines も同様に渡されます。この出力にはウィンドウタイトルから取り出した語（タイトルの断片）が含まれます。`--questions` のタイトルや URL 断片は `--no-titles` で除外できますが、`--suggest-rules` の候補語はタイトル断片そのものであり、`--no-titles` では除外されません。なお、生ログやトランスクリプトの全文が skill に渡されることはありません。
 
 ## Install
 
@@ -95,6 +95,14 @@ bundles = ["com.example.ReviewApp"]
 
 同一の `[[category]]` ブロック内では、いずれか 1 つの条件に合致した時点で該当の作業区分として判定されます。なお、既定の判定ルールで十分な場合は `[[category]]` の記述を省略できます。
 
+`dayglass report --suggest-rules` が候補にする出現回数と日数は、同じファイルの `[thresholds]` で変更できます。既定はどちらも 2 です。
+
+```toml
+[thresholds]
+suggest_occurrences = 2
+suggest_days = 2
+```
+
 ## Commands
 
 ```sh
@@ -124,6 +132,7 @@ dayglass report --help
 ```sh
 dayglass report --month 2026-09 --format csv|json|md|otlp-metrics
 dayglass report --questions --month 2026-09
+dayglass report --suggest-rules --month 2026-09
 dayglass note --question ID --project CODE --category coding
 dayglass note --day 2026-09-14 --summary "確認済みの作業内容"
 dayglass report --freeze --month 2026-09 --format csv

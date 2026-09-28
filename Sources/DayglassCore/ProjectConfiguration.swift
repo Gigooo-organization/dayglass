@@ -5,12 +5,20 @@ public extension ReportConfiguration {
         let text = try String(contentsOf: url, encoding: .utf8)
         var projects: [ProjectRule] = []
         var categories: [CategoryRule] = []
+        var thresholds = ReportThresholds()
         var section: String?
         var values: [String: String] = [:]
 
         func flush() {
             guard let section else { return }
-            if section == "project", let rawCode = values["code"] {
+            if section == "thresholds" {
+                if let occurrences = integer(values["suggest_occurrences"]) {
+                    thresholds.suggestOccurrences = occurrences
+                }
+                if let days = integer(values["suggest_days"]) {
+                    thresholds.suggestDays = days
+                }
+            } else if section == "project", let rawCode = values["code"] {
                 projects.append(ProjectRule(
                     code: scalar(rawCode),
                     name: scalar(values["name"]),
@@ -40,13 +48,18 @@ public extension ReportConfiguration {
                 section = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
                 continue
             }
+            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                flush()
+                section = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+                continue
+            }
             guard let equals = trimmed.firstIndex(of: "=") else { continue }
             let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)
             let value = trimmed[trimmed.index(after: equals)...].trimmingCharacters(in: .whitespaces)
             values[String(key)] = String(value)
         }
         flush()
-        return ReportConfiguration(projects: projects, categories: categories, timeZone: timeZone)
+        return ReportConfiguration(projects: projects, categories: categories, thresholds: thresholds, timeZone: timeZone)
     }
 }
 
@@ -64,6 +77,11 @@ private func scalar(_ value: String?) -> String {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") { return String(trimmed.dropFirst().dropLast()) }
     return trimmed
+}
+
+private func integer(_ value: String?) -> Int? {
+    guard let value else { return nil }
+    return Int(scalar(value))
 }
 
 private func array(_ value: String?) -> [String] {

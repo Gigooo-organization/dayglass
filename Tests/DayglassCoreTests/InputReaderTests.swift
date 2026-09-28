@@ -61,4 +61,26 @@ import Testing
         #expect(configuration.calendar.identifier == .gregorian)
         #expect(configuration.calendar.timeZone == .gmt)
     }
+
+    @Test func loadsSuggestRuleThresholdsFromProjectsTOML() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dayglass-\(UUID().uuidString).toml")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try """
+        [thresholds]
+        suggest_occurrences = 4
+        suggest_days = 3
+
+        [[project]]
+        code = "PJ-A"
+        title = ["alpha"]
+        """.write(to: url, atomically: true, encoding: .utf8)
+
+        let configuration = try ReportConfiguration.loadTOML(from: url)
+
+        #expect(configuration.thresholds.suggestOccurrences == 4)
+        #expect(configuration.thresholds.suggestDays == 3)
+        #expect(configuration.thresholds.unassigned == 15 * 60)
+        #expect(configuration.projects.map(\.code) == ["PJ-A"])
+    }
 }

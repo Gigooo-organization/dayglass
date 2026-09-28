@@ -27,7 +27,7 @@ public enum CLIHelp {
             return """
             Usage:
               dayglass report [--month YYYY-MM] [--format FORMAT] [--table TABLE]
-                              [--questions] [--freeze] [--no-titles] [--days N]
+                              [--questions] [--suggest-rules] [--freeze] [--no-titles] [--days N]
 
             Aggregate local observations. GitHub synchronization is attempted first;
             local reporting continues if synchronization fails.
@@ -37,6 +37,7 @@ public enum CLIHelp {
               --format FORMAT   csv, json, md, or otlp-metrics (default: json)
               --table TABLE     time, ai, or output (default: time)
               --questions       Print unresolved time ranges as JSON
+              --suggest-rules   Print JSON Lines candidates for repeated unassigned terms
               --days N          Limit the report to the last N local days, including today
               --freeze          Save reproducible submission files
               --no-titles       Omit local window titles from JSON output
