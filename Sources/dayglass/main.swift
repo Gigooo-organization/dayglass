@@ -145,7 +145,7 @@ func note(_ options: CLIOptions) throws {
     let store = NoteStore(root: defaultDataRoot)
     if let questionID = options.value("question") {
         let month = options.value("month") ?? monthString(Date())
-        let question = try loadResult(month: month).questions.first { $0.id == questionID }
+        let question = try findQuestion(id: questionID, month: month, days: options.value("days"))
         guard let question else { throw DayglassCLIError.message("question not found: \(questionID)") }
         let skip = options.has("skip")
         guard skip || (options.value("project") != nil && options.value("category") != nil) else {
@@ -258,6 +258,25 @@ func evidence(_ options: CLIOptions) throws {
 func setup(_ options: CLIOptions) throws {
     let mode = try SetupCoordinator.Mode(rawValue: options.positionals.first ?? "all") ?? { throw DayglassCLIError.usage("setup accepts hooks, telemetry, or no argument") }()
     try SetupCoordinator(dataRoot: defaultDataRoot).run(mode: mode)
+}
+
+/// Month reports keep the ids `note --question` already understands. A trailing
+/// `--days` window can split a range at the boundary, or reach into the previous
+/// month, so those ids are looked up in that same window before giving up.
+func findQuestion(id: String, month: String, days: String?) throws -> ReportQuestion? {
+    if let question = try loadResult(month: month).questions.first(where: { $0.id == id }) {
+        return question
+    }
+    var windows = [SessionStartQuestions.defaultDays]
+    if let days, let count = Int(days), count > 0, count != SessionStartQuestions.defaultDays {
+        windows.insert(count, at: 0)
+    }
+    for count in windows {
+        if let question = try loadRecentResult(days: count, now: Date()).questions.first(where: { $0.id == id }) {
+            return question
+        }
+    }
+    return nil
 }
 
 func loadResult(month: String) throws -> ReportResult {

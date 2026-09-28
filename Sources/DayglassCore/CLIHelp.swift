@@ -52,6 +52,8 @@ public enum CLIHelp {
 
             Record a human correction or confirmed daily summary. CATEGORY must be one of:
             research, coding, review, docs, meeting, or other.
+            A question id from `report --days N` is resolved in that window when the
+            month report does not contain it. The default window is the last 7 days.
             """
         case "evidence":
             return """
