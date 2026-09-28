@@ -20,7 +20,7 @@ struct CLIOptions {
 
     init(_ arguments: ArraySlice<String>) throws {
         let arguments = Array(arguments)
-        let flagKeys: Set<String> = ["questions", "no-titles", "freeze", "skip", "help", "h"]
+        let flagKeys: Set<String> = ["questions", "no-titles", "freeze", "skip", "help", "h", "suggest-rules"]
         var index = 0
         while index < arguments.count {
             let argument = arguments[index]
@@ -115,16 +115,19 @@ func report(_ options: CLIOptions) throws {
         fputs("dayglass: github sync skipped: \(error)\n", stderr)
     }
     let month = options.value("month") ?? monthString(Date())
-    let result: ReportResult
+    let context: ReportContext
     if let daysValue = options.value("days") {
         guard let days = Int(daysValue), days > 0 else {
             throw DayglassCLIError.usage("--days requires a positive integer")
         }
-        result = try loadRecentResult(days: days, now: Date())
+        context = try loadRecentContext(days: days, now: Date())
     } else {
-        result = try loadResult(month: month)
+        context = try loadContext(month: month)
     }
-    if options.has("questions") {
+    let result = context.result
+    if options.has("suggest-rules") {
+        print(RuleSuggester(input: context.input, result: result, configuration: context.configuration, notes: context.notes).jsonLines(), terminator: "")
+    } else if options.has("questions") {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -260,6 +263,13 @@ func setup(_ options: CLIOptions) throws {
     try SetupCoordinator(dataRoot: defaultDataRoot).run(mode: mode)
 }
 
+struct ReportContext {
+    let input: ReportInput
+    let configuration: ReportConfiguration
+    let notes: [NoteRecord]
+    let result: ReportResult
+}
+
 /// Month reports keep the ids `note --question` already understands. A trailing
 /// `--days` window can split a range at the boundary, or reach into the previous
 /// month, so those ids are looked up in that same window before giving up.
@@ -279,13 +289,19 @@ func findQuestion(id: String, month: String, days: String?) throws -> ReportQues
     return nil
 }
 
-func loadResult(month: String) throws -> ReportResult {
+func loadContext(month: String) throws -> ReportContext {
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(month: month)
+    let configuration = try loadConfiguration()
     let notes = try NoteStore(root: defaultDataRoot).load(month: month)
-    return ReportEngine(input: input, configuration: try loadConfiguration(), notes: notes).build()
+    let result = ReportEngine(input: input, configuration: configuration, notes: notes).build()
+    return ReportContext(input: input, configuration: configuration, notes: notes, result: result)
 }
 
-func loadRecentResult(days: Int, now: Date) throws -> ReportResult {
+func loadResult(month: String) throws -> ReportResult {
+    try loadContext(month: month).result
+}
+
+func loadRecentContext(days: Int, now: Date) throws -> ReportContext {
     let calendar = DayglassCalendar.local
     let names = SessionStartQuestions.dayFolderNames(days: days, endingAt: now, calendar: calendar)
     let input = try ObservationStore(root: defaultDataRoot.appendingPathComponent("otlp", isDirectory: true)).load(days: Set(names))
@@ -293,9 +309,15 @@ func loadRecentResult(days: Int, now: Date) throws -> ReportResult {
     for month in Set(names.map { String($0.prefix(7)) }).sorted() {
         notes.append(contentsOf: try NoteStore(root: defaultDataRoot).load(month: month))
     }
-    let built = ReportEngine(input: input, configuration: try loadConfiguration(), notes: notes).build()
+    let configuration = try loadConfiguration()
+    let built = ReportEngine(input: input, configuration: configuration, notes: notes).build()
     let questions = SessionStartQuestions.filter(built.questions, days: days, endingAt: now, calendar: calendar)
-    return ReportResult(time: built.time, ai: built.ai, output: built.output, blocks: built.blocks, questions: questions)
+    let result = ReportResult(time: built.time, ai: built.ai, output: built.output, blocks: built.blocks, questions: questions)
+    return ReportContext(input: input, configuration: configuration, notes: notes, result: result)
+}
+
+func loadRecentResult(days: Int, now: Date) throws -> ReportResult {
+    try loadRecentContext(days: days, now: now).result
 }
 
 func loadConfiguration() throws -> ReportConfiguration {
