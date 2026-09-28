@@ -152,15 +152,13 @@ private enum InputDeviceMonitor {
         guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
         let count = Int(size) / MemoryLayout<AudioDeviceID>.stride
         guard count > 0 else { return [] }
-        var identifiers = [AudioDeviceID](repeating: 0, count: count)
+        let identifiers = UnsafeMutablePointer<AudioDeviceID>.allocate(capacity: count)
+        defer { identifiers.deallocate() }
         var readSize = UInt32(MemoryLayout<AudioDeviceID>.stride * count)
-        let status: OSStatus = identifiers.withUnsafeMutableBytes { buffer in
-            guard let base = buffer.baseAddress else { return 1 }
-            return AudioObjectGetPropertyData(system, &address, 0, nil, &readSize, base)
-        }
+        let status = AudioObjectGetPropertyData(system, &address, 0, nil, &readSize, UnsafeMutableRawPointer(identifiers))
         guard status == noErr else { return [] }
         let reported = Int(readSize) / MemoryLayout<AudioDeviceID>.stride
-        return Array(identifiers.prefix(max(0, min(reported, count))))
+        return Array(UnsafeBufferPointer(start: identifiers, count: max(0, min(reported, count))))
     }
 
     private static func hasInputStream(_ device: AudioDeviceID) -> Bool {
@@ -180,12 +178,12 @@ private enum InputDeviceMonitor {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var running: UInt32 = 0
+        let running = UnsafeMutablePointer<UInt32>.allocate(capacity: 1)
+        defer { running.deallocate() }
+        running.pointee = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
-        let status = withUnsafeMutablePointer(to: &running) { pointer in
-            AudioObjectGetPropertyData(device, &address, 0, nil, &size, UnsafeMutableRawPointer(pointer))
-        }
-        return status == noErr && running != 0
+        let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, UnsafeMutableRawPointer(running))
+        return status == noErr && running.pointee != 0
     }
 }
 
