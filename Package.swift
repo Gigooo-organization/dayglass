@@ -5,7 +5,8 @@ var targets: [Target] = [
     // Pure, side-effect-free logic: OTLP encoding, day files, time
     // accounting. Kept apart from the system-API shell so every rule here
     // is unit-testable without a Mac session.
-    .target(name: "DayglassCore"),
+    .target(name: "DayglassCore", plugins: ["GitDescribe"]),
+    .plugin(name: "GitDescribe", capability: .buildTool()),
 
     .testTarget(
         name: "DayglassCoreTests",
