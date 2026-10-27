@@ -32,7 +32,7 @@ dayglass setup
 
 Homebrew の仕様上、非公式 tap の利用には明示的な信頼設定が必要となるため、あらかじめ `brew trust` で formula を信頼した上でインストールします。ローカルでコンパイルするソースビルド形式の formula であり、依存関係として `gh`（GitHub CLI）が必要です。
 
-`dayglass setup` コマンドを実行すると、既存の設定ファイルを保持しながら Claude Code / Codex 向けの hooks および OTel 設定を自動で追記し、端末固有の source ID、`projects.toml`（プロジェクト定義）、skill、launchd 向け plist ファイルを一括生成します。さらに、実行中のバイナリを `~/.local/libexec/dayglass` へ複製した上で、`launchctl bootstrap` により daemon / serve / sync の各エージェントを起動します（更新時は先に `bootout` するため、再実行するだけで新しいバイナリに入れ替わります）。launchd は最小限の PATH しか渡さないため、setup 実行時の PATH を plist に記録し、Homebrew や Nix 配下の `gh` を `sync` から参照できるようにします。なお、既存の設定ファイルが破損している場合は、意図しない上書きを防ぐため処理を安全に中断します。
+`dayglass setup` コマンドを実行すると、既存の設定ファイルを保持しながら Claude Code / Codex 向けの hooks および OTel 設定を自動で追記し、端末固有の source ID、`projects.toml`（プロジェクト定義）、skill、launchd 向け plist ファイルを一括生成します。さらに、実行中のバイナリを `~/.local/libexec/dayglass` へ複製した上で、`launchctl bootstrap` により daemon / serve / sync / reap の各エージェントを起動します（reap は 1 日 1 回、90 日を過ぎた観測ログを削除します）（更新時は先に `bootout` するため、再実行するだけで新しいバイナリに入れ替わります）。launchd は最小限の PATH しか渡さないため、setup 実行時の PATH を plist に記録し、Homebrew や Nix 配下の `gh` を `sync` から参照できるようにします。なお、既存の設定ファイルが破損している場合は、意図しない上書きを防ぐため処理を安全に中断します。
 
 フォアグラウンドアプリの監視（daemon）を利用するには、macOS の「システム設定 > プライバシーとセキュリティ > アクセシビリティ」での実行許可が必要です。Developer ID を用いない個人ビルドではバイナリを `~/.local/libexec/dayglass` の固定パスに配置するため、バイナリ更新のたびにアクセシビリティ権限の再許可が求められます。キーチェーンアクセスで同名の自己署名コード署名証明書（Code Signing identity）を作成し、固定パスのバイナリを毎回同一の identity で署名することで、更新時の再許可の手間を最小限に抑えることができます。
 

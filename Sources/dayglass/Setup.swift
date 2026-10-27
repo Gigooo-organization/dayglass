@@ -157,7 +157,8 @@ final class SetupCoordinator {
         let plists: [(label: String, contents: String)] = [
             ("com.gigooo.dayglass.daemon", launchdPlist(label: "com.gigooo.dayglass.daemon", arguments: ["daemon"], binary: binary.path, logRoot: logRoot)),
             ("com.gigooo.dayglass.serve", launchdPlist(label: "com.gigooo.dayglass.serve", arguments: ["serve"], binary: binary.path, logRoot: logRoot)),
-            ("com.gigooo.dayglass.sync", syncLaunchdPlist(binary: binary.path, logRoot: logRoot)),
+            ("com.gigooo.dayglass.sync", periodicLaunchdPlist(label: "com.gigooo.dayglass.sync", arguments: ["sync", "github"], binary: binary.path, logRoot: logRoot)),
+            ("com.gigooo.dayglass.reap", periodicLaunchdPlist(label: "com.gigooo.dayglass.reap", arguments: ["reap"], binary: binary.path, logRoot: logRoot)),
         ]
 
         // Stop the agents before replacing the binary they run, so the fresh
@@ -322,24 +323,23 @@ final class SetupCoordinator {
         """
     }
 
-    private func syncLaunchdPlist(binary: String, logRoot: String) -> String {
-        """
+    private func periodicLaunchdPlist(label: String, arguments: [String], binary: String, logRoot: String) -> String {
+        let values = ([binary] + arguments).map { "        <string>\(xmlEscape($0))</string>" }.joined(separator: "\n")
+        return """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-            <key>Label</key><string>com.gigooo.dayglass.sync</string>
+            <key>Label</key><string>\(label)</string>
             <key>ProgramArguments</key>
             <array>
-                <string>\(xmlEscape(binary))</string>
-                <string>sync</string>
-                <string>github</string>
+        \(values)
             </array>
             <key>RunAtLoad</key><true/>
             <key>StartInterval</key><integer>86400</integer>
         \(pathEnvironment)
-            <key>StandardOutPath</key><string>\(xmlEscape(logRoot))/com.gigooo.dayglass.sync.out.log</string>
-            <key>StandardErrorPath</key><string>\(xmlEscape(logRoot))/com.gigooo.dayglass.sync.err.log</string>
+            <key>StandardOutPath</key><string>\(xmlEscape(logRoot))/\(label).out.log</string>
+            <key>StandardErrorPath</key><string>\(xmlEscape(logRoot))/\(label).err.log</string>
         </dict>
         </plist>
         """

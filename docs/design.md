@@ -85,7 +85,7 @@ Apple Silicon Mac を利用するチームメンバー全員に配布し、各�
 - 出力ファイル: `traces.jsonl` / `logs.jsonl` / `metrics.jsonl`。1 行が OTLP の Export リクエスト（`{"resourceSpans":[...]}` / `{"resourceLogs":[...]}` / `{"resourceMetrics":[...]}`）に相当
 - 本形式は OpenTelemetry Collector の `file` exporter が出力し、`otlpjsonfile` receiver が読み込むフォーマットそのものである。将来的に中央集約型の構成へ切り替える場合も、Collector を追加配置するだけで対応できる
 - 各行の末尾は改行コード（`\n`）で区切る。途中で切れた不完全な末尾行は、読み込み時に自動破棄する（既存の `sealAbandoned` と同様の処理仕様）
-- 保持期間: デフォルトで 90 日間。`dayglass reap` コマンドにより日別ディレクトリ単位でクリーンアップする
+- 保持期間: デフォルトで 90 日間。`dayglass reap` コマンドにより日別ディレクトリ単位でクリーンアップする。`setup` が登録する launchd エージェントが 1 日 1 回実行する
 
 観測ログとは別に、確定データおよび提出用データを同一の親ディレクトリ配下に配置する:
 
