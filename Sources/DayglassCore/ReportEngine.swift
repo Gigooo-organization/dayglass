@@ -219,6 +219,9 @@ public struct ReportEngine: Sendable {
         if isMeetingApp(app: app, bundle: bundle) || domain == "meet.google.com" || domain == "teams.microsoft.com" || domain.hasSuffix(".zoom.us") {
             return CategoryAssignment(category: .meeting, basis: domain.isEmpty ? "bundle" : "url")
         }
+        if isChatApp(app: app, bundle: bundle) || ["app.slack.com", "discord.com", "www.chatwork.com", "talk.worksmobile.com"].contains(domain) {
+            return CategoryAssignment(category: .communication, basis: domain.isEmpty ? "bundle" : "url")
+        }
         if domain == "github.com" && (path.contains("/pull/") || path.contains("/compare/")) {
             return CategoryAssignment(category: .review, basis: "url")
         }
@@ -635,19 +638,24 @@ private func wildcard(_ pattern: String, matches value: String) -> Bool {
 }
 
 private func isBrowser(bundle: String, app: String) -> Bool {
-    ["safari", "chrome", "edge", "firefox", "brave", "arc"].contains { app.contains($0) } ||
-        ["com.apple.Safari", "com.google.Chrome", "com.microsoft.edgemac", "org.mozilla.firefox", "com.brave.Browser", "company.thebrowser.Browser"].contains(bundle)
+    ["safari", "chrome", "edge", "firefox", "brave", "arc", "aside"].contains { app.contains($0) } ||
+        ["com.apple.Safari", "com.google.Chrome", "com.microsoft.edgemac", "org.mozilla.firefox", "com.brave.Browser", "company.thebrowser.Browser", "at.studio.AsideBrowser"].contains(bundle)
 }
 
 private func isCodeApplication(_ span: ObservedSpan) -> Bool {
     let app = (span.attributes["app.name"] ?? "").lowercased()
     let bundle = (span.attributes["app.bundle_id"] ?? "").lowercased()
-    return ["terminal", "iterm", "xcode", "visual studio", "code", "cursor", "zed", "emacs", "nvim", "neovim"].contains { app.contains($0) } ||
+    return ["terminal", "iterm", "wezterm", "ghostty", "kitty", "alacritty", "warp", "xcode", "visual studio", "code", "cursor", "zed", "emacs", "nvim", "neovim"].contains { app.contains($0) } ||
         ["com.apple.Terminal", "com.googlecode.iterm2", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "dev.zed.Zed", "com.apple.dt.Xcode"].contains(bundle)
 }
 
 private func isMeetingApp(app: String, bundle: String) -> Bool {
     app.contains("zoom") || app.contains("teams") || app.contains("facetime") || bundle.lowercased().contains("zoom") || bundle.lowercased().contains("teams")
+}
+
+private func isChatApp(app: String, bundle: String) -> Bool {
+    ["slack", "line works", "discord", "chatwork"].contains { app.contains($0) } ||
+        ["com.tinyspeck.slackmacgap", "com.naver.lineworks", "com.hnc.Discord"].contains(bundle)
 }
 
 private func isDocsApp(app: String, bundle: String) -> Bool {

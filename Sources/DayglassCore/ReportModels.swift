@@ -64,6 +64,7 @@ public enum WorkCategory: String, CaseIterable, Codable, Sendable {
     case review
     case docs
     case meeting
+    case communication
     case other
 }
 

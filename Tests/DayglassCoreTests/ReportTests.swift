@@ -480,3 +480,28 @@ private func date(_ value: String) -> Date {
 private func lockDate(_ value: String) -> Date {
     ISO8601DateFormatter().date(from: value)!
 }
+
+@Suite struct CategoryDefaultsTests {
+    private func category(app: String, bundle: String, domain: String? = nil) -> (String, String)? {
+        var attributes = ["app.name": app, "app.bundle_id": bundle]
+        if let domain { attributes["url.domain"] = domain }
+        let span = ObservedSpan(name: "focus", start: lockDate("2026-10-01T10:00:00Z"), end: lockDate("2026-10-01T11:00:00Z"), attributes: attributes)
+        return ReportEngine(input: ReportInput(spans: [span])).build().time.first.map { ($0.category, $0.categoryBasis) }
+    }
+
+    @Test func chatAppsAreCommunication() {
+        #expect(category(app: "Slack", bundle: "com.tinyspeck.slackmacgap")! == ("communication", "bundle"))
+        #expect(category(app: "LINE WORKS", bundle: "com.naver.lineworks")! == ("communication", "bundle"))
+        #expect(category(app: "Microsoft Edge", bundle: "com.microsoft.edgemac", domain: "app.slack.com")! == ("communication", "url"))
+    }
+
+    @Test func modernTerminalsAreCoding() {
+        #expect(category(app: "WezTerm", bundle: "com.github.wez.wezterm")?.0 == "coding")
+        #expect(category(app: "Ghostty", bundle: "com.mitchellh.ghostty")?.0 == "coding")
+        #expect(category(app: "T3 Code (Beta)", bundle: "com.t3tools.t3code")?.0 == "coding")
+    }
+
+    @Test func asideIsABrowser() {
+        #expect(category(app: "Aside", bundle: "at.studio.AsideBrowser", domain: "developer.apple.com")! == ("research", "url"))
+    }
+}
