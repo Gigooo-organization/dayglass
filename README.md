@@ -156,4 +156,6 @@ swift test
 swift build -c release
 ```
 
+git チェックアウトからビルドすると、`dayglass --version` は `git describe` の結果を返します（例: `0.5.1-2-gabc1234-dirty`）。タグ上のクリーンなビルドと、`.git` を含まない Homebrew のソースビルドは `Sources/DayglassCore/Version.swift` の `releaseVersion` を返します。リリース時はこの値を上げてからタグを打ちます。
+
 CI（GitHub Actions）では macOS ランナー上でユニットテストおよびリリースビルド（`release build`）を実行します。`v*` タグのプッシュ時には、ビルドされた Apple Silicon 向けバイナリとチェックサム（SHA-256）を GitHub Releases に自動添付します。
