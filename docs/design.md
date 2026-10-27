@@ -258,7 +258,7 @@ url = ["karte.example.com"]
 | `docs` | 資料作成 | Keynote / Pages / Numbers / Word / Excel / PowerPoint / Obsidian / Notion がフォアグラウンドにある。またはブラウザで `docs.google.com` / `notion.so` / `*.atlassian.net` の `/wiki/` を表示している |
 | `research` | 調査 | ブラウザがフォアグラウンドにあり上記のいずれにも該当しない |
 | `coding` | 開発 | エディタまたはターミナルがフォアグラウンドにある |
-| `other` | その他 | 上記以外のアプリケーション（Slack、メール、Finder など） |
+| `other` | その他 | 上記以外のアプリケーション（Slack、メール、Finder など）。前面アプリがロック画面（`loginwindow`）の区間は作業時間に含めず、`afk`（理由 `locked`）として扱う |
 
 `audio` span（入力デバイスが動作中だった区間。4.3）は、上の表のあとで次のように区分へ反映する。
 
