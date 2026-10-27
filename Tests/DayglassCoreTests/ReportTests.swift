@@ -599,3 +599,79 @@ private extension ObservedSpan {
         return ObservedSpan(name: name, start: start, end: end, attributes: values)
     }
 }
+
+@Suite struct CalendarMeetingTests {
+    private let kintone = ProjectRule(code: "KP", title: ["*kintone*"])
+
+    private func span(_ name: String, _ start: String, _ end: String, _ attributes: [String: String] = [:]) -> ObservedSpan {
+        ObservedSpan(name: name, start: lockDate("2026-10-01T\(start):00Z"), end: lockDate("2026-10-01T\(end):00Z"), attributes: attributes)
+    }
+
+    private func event(_ id: String, _ title: String, _ start: String, _ end: String, syncedAt: Int = 0, deleted: Bool = false) -> ObservedSpan {
+        var attributes = ["calendar.event.id": id, "event.title": title, "calendar.synced_at": "\(syncedAt)"]
+        if deleted { attributes["calendar.event.status"] = "deleted" }
+        return span("calendar.event", start, end, attributes)
+    }
+
+    private func build(_ spans: [ObservedSpan]) -> ReportResult {
+        ReportEngine(input: ReportInput(spans: spans + [span("dayglass.run", "09:00", "12:00")]), configuration: ReportConfiguration(projects: [kintone])).build()
+    }
+
+    @Test func aLockedLaptopDuringAnEventIsThatMeeting() throws {
+        let result = build([
+            span("focus", "09:00", "10:00", ["app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "example.com"]),
+            span("focus", "10:00", "11:00", ["app.name": "loginwindow", "app.bundle_id": "com.apple.loginwindow"]),
+            span("focus", "11:00", "12:00", ["app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "example.com"]),
+            event("e1", "kintone 定例", "10:00", "11:00"),
+        ])
+        let meeting = try #require(result.time.first { $0.category == "meeting" })
+        #expect(meeting.seconds == 3600)
+        #expect(meeting.project == "KP")
+        #expect(meeting.categoryBasis == "calendar")
+        #expect(meeting.projectBasis == "calendar")
+        #expect(!result.questions.contains { $0.kind == "gap" })
+    }
+
+    @Test func notesTakenDuringAnEventCountAsTheMeeting() throws {
+        let result = build([
+            span("focus", "10:00", "11:00", ["app.name": "Obsidian", "app.bundle_id": "md.obsidian"]),
+            event("e1", "kintone 定例", "10:00", "11:00"),
+        ])
+        #expect(result.time.map(\.category) == ["meeting"])
+        #expect(result.time.first?.project == "KP")
+    }
+
+    @Test func anOnlineMeetingTakesItsProjectFromTheEventTitle() {
+        let result = build([
+            span("focus", "10:00", "11:00", ["app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "meet.google.com"]),
+            event("e1", "kintone 定例", "10:00", "11:00"),
+        ])
+        #expect(result.time.map(\.project) == ["KP"])
+    }
+
+    @Test func aRescheduledEventUsesItsLatestTime() throws {
+        let result = build([
+            span("focus", "09:00", "09:30", ["app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "example.com"]),
+            span("focus", "09:30", "10:30", ["app.name": "loginwindow", "app.bundle_id": "com.apple.loginwindow"]),
+            span("focus", "10:30", "11:00", ["app.name": "loginwindow", "app.bundle_id": "com.apple.loginwindow"]).withTitle("again"),
+            span("focus", "11:00", "12:00", ["app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "example.com"]),
+            event("e1", "kintone 定例", "10:30", "11:00", syncedAt: 2),
+            event("e1", "kintone 定例", "09:30", "10:30", syncedAt: 1),
+        ])
+        let gap = try #require(result.questions.first { $0.kind == "gap" })
+        #expect(gap.seconds == 3600)
+        #expect(result.time.first { $0.category == "meeting" }?.seconds == 30 * 60)
+    }
+
+    @Test func aDeletedEventIsNoMeeting() {
+        let result = build([
+            span("focus", "09:00", "10:00", ["app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "example.com"]),
+            span("focus", "10:00", "11:00", ["app.name": "loginwindow", "app.bundle_id": "com.apple.loginwindow"]),
+            span("focus", "11:00", "12:00", ["app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "example.com"]),
+            event("e1", "kintone 定例", "10:00", "11:00", syncedAt: 1),
+            event("e1", "kintone 定例", "10:00", "11:00", syncedAt: 2, deleted: true),
+        ])
+        #expect(!result.time.contains { $0.category == "meeting" })
+        #expect(result.questions.contains { $0.kind == "gap" })
+    }
+}

@@ -111,6 +111,7 @@ Apple Silicon Mac を利用するチームメンバー全員に配布し、各�
 | `focus` | `app.bundle_id`, `app.name`, `window.title`, `url.domain`, `url.path`（許可ホストのみ。クエリおよびフラグメントは常時破棄） | daemon |
 | `afk` | `dayglass.afk.reason` = `idle` / `locked` / `sleep` / `paused`（`dayglass pause` による停止中） | daemon |
 | `audio` | 属性なし。入力デバイスが動作していた区間だけを記録する（デバイス名や音声は記録しない。出力デバイスは対象外） | daemon |
+| `calendar.event` | `calendar.event.id`、`event.title`（ローカルのみ保持。ウィンドウタイトルと同じ扱い）、`calendar.synced_at`（同期時刻、Unix 秒）、削除時のみ `calendar.event.status` = `deleted`。同じ予定は同期のたびに追記し、`report` は同期時刻が最新の記録だけを使う | `sync calendar`（未実装） |
 | `dayglass.run` | daemon の起動から終了まで。記録の欠損（空白）と実際の無操作時間を区別するために用いる | daemon |
 | `gen_ai.session` | `gen_ai.system` (`anthropic` / `openai`), `gen_ai.agent.name` (`claude-code` / `codex`), `gen_ai.conversation.id`, `gen_ai.request.model`, `vcs.repository.url.full`, `vcs.ref.head.name`, `dayglass.cwd`, `dayglass.project` | hook |
 | `gen_ai.turn` | 親は `gen_ai.session`。`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.cache_read_tokens`, `dayglass.prompt.chars`, `dayglass.tool_calls`, `dayglass.edit_calls`（ファイル編集ツールの呼び出し回数。編集ありターン数の集計に利用） | hook（境界情報）＋ report 時のトランスクリプト解析補完 |
@@ -269,6 +270,13 @@ url = ["karte.example.com"]
 - `docs` に判定された区間のうち `audio` と重なる部分は `meeting` を優先する。重ならない部分は `docs` のままとする
 - それ以外の区分（`coding` など）は、マイクが音声メモやボイス入力でも動作するため `audio` では変えない
 - この推定の `category_basis` は `audio`、`confidence` は `inferred` とする。`note` がある場合は従来どおり `note` が優先され `confirmed` になる
+
+カレンダーの予定（`calendar.event` span）も `audio` と同じく会議の手がかりとして扱い、両方が重なる区間では予定を優先する。
+
+- 予定の時間帯の `afk`（`paused` を除く。ロック中を含む）は `meeting` とし、`gap` の問いにしない。対面の会議で PC をロックしている場合を想定する
+- 予定と重なる `docs` は重なった部分を `meeting` とする。それ以外の区分は変えない（予定は作業時間の確保に使われることもあるため）
+- 予定のタイトルに `projects.toml` の `title` パターンを適用してプロジェクトを推定し、予定の時間帯の `afk` 由来の会議と、プロジェクト未割当のオンライン会議に付ける
+- この推定の `category_basis` / `project_basis` は `calendar` とする
 - 出力デバイスの再生は `audio` に記録しない
 
 判定の根拠は `category_basis` 属性に記録する（`note` / `url` / `bundle` / `audio` / `none` のいずれか）。ブラウザ経路とアプリ経路の両方を持つ区分（`meeting` / `docs`）は、表の各行でその両方を必ず定義する。
