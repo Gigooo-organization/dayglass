@@ -67,11 +67,11 @@ import Testing
     }
 
     @Test func aConfirmedNoteSuppliesTheProjectCode() throws {
-        let confirmed = focus(on: "2026-09-13", minutes: 60, title: "customer-a — Ghostty")
+        let confirmed = focus(on: "2026-09-13", minutes: 60, title: "customer-a — Example Notes")
         let spans = [
             confirmed,
-            focus(on: "2026-09-14", minutes: 60, title: "customer-a — Ghostty"),
-            focus(on: "2026-09-15", minutes: 30, title: "customer-a — Ghostty"),
+            focus(on: "2026-09-14", minutes: 60, title: "customer-a — Example Notes"),
+            focus(on: "2026-09-15", minutes: 30, title: "customer-a — Example Notes"),
         ]
         let notes = [
             NoteRecord(start: confirmed.start, end: confirmed.end, project: "PJ-A", category: "coding"),
@@ -169,8 +169,8 @@ private func focus(
     minutes: Int,
     title: String,
     domain: String? = nil,
-    bundle: String = "com.mitchellh.ghostty",
-    app: String = "Ghostty"
+    bundle: String = "com.example.notes",
+    app: String = "Example Notes"
 ) -> ObservedSpan {
     let start = date(String(format: "%@T%02d:00:00Z", day, hour))
     var attributes = [
