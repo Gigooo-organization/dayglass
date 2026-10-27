@@ -87,7 +87,7 @@ final class SetupCoordinator {
         let codexURL = home.appendingPathComponent(".codex/config.toml")
         try fileManager.createDirectory(at: codexURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let existing = fileManager.fileExists(atPath: codexURL.path) ? try String(contentsOf: codexURL, encoding: .utf8) : ""
-        guard existing.range(of: "(?m)^\\[otel\\]\\s*$", options: .regularExpression) == nil else { return }
+        guard !codexConfigHasOTel(existing) else { return }
         let block = """
 
         [otel]
