@@ -45,7 +45,8 @@ final class TelemetryServer {
                 if errno == EINTR { continue }
                 throw posixError()
             }
-            handle(client)
+            // This loop never returns to a run loop, so nothing else drains Foundation's autoreleased objects.
+            autoreleasepool { handle(client) }
         }
     }
 

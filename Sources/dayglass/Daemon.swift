@@ -314,20 +314,25 @@ final class LocalSinkServer: @unchecked Sendable {
         while serverFD >= 0 {
             let client = accept(serverFD, nil, nil)
             guard client >= 0 else { continue }
-            var data = Data()
-            var buffer = [UInt8](repeating: 0, count: 8_192)
-            while true {
-                let count = read(client, &buffer, buffer.count)
-                if count <= 0 { break }
-                data.append(buffer, count: count)
-            }
-            close(client)
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let signalName = object["signal"] as? String,
-                  let signal = OTLPFileSignal(rawValue: signalName),
-                  let timestamp = object["date"] as? NSNumber,
-                  let line = object["line"] as? String else { continue }
-            try? dayFile.append(line, signal: signal, at: Date(timeIntervalSince1970: timestamp.doubleValue))
+            // This loop never returns to a run loop, so nothing else drains Foundation's autoreleased objects.
+            autoreleasepool { receive(client) }
         }
+    }
+
+    private func receive(_ client: Int32) {
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 8_192)
+        while true {
+            let count = read(client, &buffer, buffer.count)
+            if count <= 0 { break }
+            data.append(buffer, count: count)
+        }
+        close(client)
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let signalName = object["signal"] as? String,
+              let signal = OTLPFileSignal(rawValue: signalName),
+              let timestamp = object["date"] as? NSNumber,
+              let line = object["line"] as? String else { return }
+        try? dayFile.append(line, signal: signal, at: Date(timeIntervalSince1970: timestamp.doubleValue))
     }
 }
