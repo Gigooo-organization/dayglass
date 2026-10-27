@@ -86,7 +86,7 @@ public struct ReportEngine: Sendable {
         turns: [ObservedSpan],
         sessions: [ObservedSpan]
     ) -> Candidate {
-        let project = project(for: focus, sessions: sessions)
+        let project = project(for: focus, sessions: sessions, turns: turns)
         let category = category(for: focus)
         let confidence = project.code == nil ? "unassigned" : "inferred"
         return Candidate(
@@ -173,7 +173,7 @@ public struct ReportEngine: Sendable {
         )
     }
 
-    private func project(for focus: ObservedSpan, sessions: [ObservedSpan]) -> ProjectAssignment {
+    private func project(for focus: ObservedSpan, sessions: [ObservedSpan], turns: [ObservedSpan]) -> ProjectAssignment {
         let title = focus.attributes["window.title"] ?? ""
         let domain = focus.attributes["url.domain"] ?? ""
         let path = focus.attributes["url.path"] ?? ""
@@ -185,22 +185,43 @@ public struct ReportEngine: Sendable {
                 return ProjectAssignment(code: rule.code, basis: "url")
             }
         }
+        if domain == "github.com", let code = projectCode(at: domain + path, anyOwner: false) {
+            return ProjectAssignment(code: code, basis: "url")
+        }
 
         guard isCodeApplication(focus) else {
             return ProjectAssignment(code: nil, basis: "none")
         }
-        let matching = Set(sessions.filter { $0.end > focus.start && $0.start < focus.end }.compactMap { session -> String? in
-            let repository = session.attributes["vcs.repository.url.full"] ?? ""
-            let cwd = session.attributes["dayglass.cwd"] ?? ""
-            let declared = session.attributes["dayglass.project"]
-            return configuration.projects.first(where: { rule in
-                (declared == rule.code) || rule.git.contains(where: { wildcard($0, matches: repository) || wildcard($0, matches: cwd) })
-            })?.code
+        // Sessions stay open for days, so a turn running under the focus says more than an idle open session.
+        let overlapping = { (spans: [ObservedSpan]) in spans.filter { $0.end > focus.start && $0.start < focus.end } }
+        // ponytail: 30-minute lookback for reading a turn's output; tune once notes show how often it is wrong.
+        let recent = turns.filter { $0.end <= focus.start && $0.end > focus.start.addingTimeInterval(-30 * 60) }.max { $0.end < $1.end }
+        let active = overlapping(turns).isEmpty ? (recent.map { [$0] } ?? []) : overlapping(turns)
+        let matching = Set((active.isEmpty ? overlapping(sessions) : active).compactMap { span -> String? in
+            if let declared = span.attributes["dayglass.project"], configuration.projects.contains(where: { $0.code == declared }) {
+                return declared
+            }
+            let location = span.attributes["vcs.repository.url.full"] ?? span.attributes["dayglass.cwd"] ?? ""
+            return projectCode(at: location, anyOwner: true)
         })
         if matching.count == 1, let code = matching.first {
             return ProjectAssignment(code: code, basis: "session")
         }
         return ProjectAssignment(code: nil, basis: matching.isEmpty ? "none" : "session", ambiguous: matching.count > 1)
+    }
+
+    /// A configured `git` pattern wins. Otherwise a GitHub checkout or repository page is its own
+    /// project, named after the repository; pages are limited to the organization's repositories.
+    private func projectCode(at location: String, anyOwner: Bool) -> String? {
+        if let rule = configuration.projects.first(where: { $0.git.contains { wildcard($0, matches: location) } }) {
+            return rule.code
+        }
+        guard let repository = repositoryName(in: location, anyOwner: anyOwner) else { return nil }
+        let suffix = "/" + repository.lowercased()
+        let named = configuration.projects.first { rule in
+            rule.git.contains { $0.trimmingCharacters(in: CharacterSet(charactersIn: "*/")).lowercased().hasSuffix(suffix) }
+        }
+        return named?.code ?? repository
     }
 
     private func category(for focus: ObservedSpan) -> CategoryAssignment {
@@ -361,8 +382,8 @@ public struct ReportEngine: Sendable {
         for candidate in merge(candidates.filter { $0.project == nil }.map(\ .range)) where Double(duration(candidate)) >= configuration.thresholds.unassigned {
             questions.append(question(kind: "unassigned", range: candidate, options: neighboringProjects(candidates: candidates, range: candidate), evidence: onScreenEvidence(in: candidate, focus: focus)))
         }
-        for candidate in candidates where candidate.projectAmbiguous {
-            questions.append(question(kind: "ambiguous_project", range: candidate.range, options: configuration.projects.map(\ .code), evidence: onScreenEvidence(in: candidate.range, focus: focus)))
+        for range in merge(candidates.filter(\.projectAmbiguous).map(\.range)) where Double(duration(range)) >= configuration.thresholds.unassigned {
+            questions.append(question(kind: "ambiguous_project", range: range, options: configuration.projects.map(\ .code), evidence: onScreenEvidence(in: range, focus: focus)))
         }
         for candidate in merge(candidates.filter { $0.categoryAmbiguous && $0.aiSeconds == 0 }.map(\ .range)) where Double(duration(candidate)) >= configuration.thresholds.ambiguousCategory {
             questions.append(question(kind: "ambiguous_category", range: candidate, options: ["coding", "review", "docs", "research"], evidence: onScreenEvidence(in: candidate, focus: focus)))
@@ -673,4 +694,19 @@ private func stableID(_ value: String) -> String {
 
 private func isLockScreen(_ span: ObservedSpan) -> Bool {
     span.attributes["app.bundle_id"] == "com.apple.loginwindow" || span.attributes["app.name"] == "loginwindow"
+}
+
+private let workOrganization = "Gigooo-organization"
+
+private func repositoryName(in location: String, anyOwner: Bool) -> String? {
+    let parts = location.split(separator: "/").map(String.init)
+    if let host = parts.firstIndex(of: "github.com"), parts.count > host + 2 {
+        let owner = parts[host + 1]
+        guard anyOwner || owner.caseInsensitiveCompare(workOrganization) == .orderedSame else { return nil }
+        return parts[host + 2]
+    }
+    if anyOwner, let worktrees = parts.firstIndex(of: "worktrees"), worktrees > 0, parts[worktrees - 1] == ".t3", parts.count > worktrees + 1 {
+        return parts[worktrees + 1]
+    }
+    return nil
 }
