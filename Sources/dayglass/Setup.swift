@@ -158,6 +158,7 @@ final class SetupCoordinator {
             ("com.gigooo.dayglass.daemon", launchdPlist(label: "com.gigooo.dayglass.daemon", arguments: ["daemon"], binary: binary.path, logRoot: logRoot)),
             ("com.gigooo.dayglass.serve", launchdPlist(label: "com.gigooo.dayglass.serve", arguments: ["serve"], binary: binary.path, logRoot: logRoot)),
             ("com.gigooo.dayglass.sync", periodicLaunchdPlist(label: "com.gigooo.dayglass.sync", arguments: ["sync", "github"], binary: binary.path, logRoot: logRoot)),
+            ("com.gigooo.dayglass.reap", periodicLaunchdPlist(label: "com.gigooo.dayglass.reap", arguments: ["reap"], binary: binary.path, logRoot: logRoot)),
         ]
 
         // Stop the agents before replacing the binary they run, so the fresh
