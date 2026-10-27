@@ -16,8 +16,12 @@ public struct ReportEngine: Sendable {
     }
 
     public func build() -> ReportResult {
-        let focus = input.spans.filter { $0.name == "focus" && $0.end > $0.start }
-        let afk = input.spans.filter { $0.name == "afk" && $0.end > $0.start }
+        let observedFocus = input.spans.filter { $0.name == "focus" && $0.end > $0.start }
+        // The daemon reports the lock screen as an ordinary foreground app, so it becomes `afk` here.
+        let focus = observedFocus.filter { !isLockScreen($0) }
+        let afk = input.spans.filter { $0.name == "afk" && $0.end > $0.start } + observedFocus.filter(isLockScreen).map {
+            ObservedSpan(name: "afk", start: $0.start, end: $0.end, attributes: ["dayglass.afk.reason": "locked"])
+        }
         let audio = input.spans.filter { $0.name == "audio" && $0.end > $0.start }
         let turns = input.spans.filter { $0.name == "gen_ai.turn" && $0.end > $0.start }
         let sessions = input.spans.filter { $0.name == "gen_ai.session" && $0.end > $0.start }
@@ -364,6 +368,8 @@ public struct ReportEngine: Sendable {
             let uncovered = uncoveredAfkRanges(afk: afk, activeWindow: activeWindow, audio: audio)
             for span in uncovered where Double(duration(span)) >= configuration.thresholds.gap {
                 let reason = afk.first { $0.start <= span.start && $0.end >= span.end }?.attributes["dayglass.afk.reason"]
+                // ponytail: fixed 2h ceiling; a lock that long is off hours, make it a threshold if teams disagree.
+                if reason == "locked" || reason == "sleep", duration(span) >= 2 * 3600 { continue }
                 let options = reason == "locked" || reason == "sleep" ? ["skip", "meeting", "research"] : ["meeting", "research", "skip"]
                 questions.append(question(kind: "gap", range: span, options: options, evidence: onScreenEvidence(in: span, focus: focus)))
             }
@@ -655,4 +661,8 @@ private func stableID(_ value: String) -> String {
         hash &*= 1099511628211
     }
     return String(format: "%016llx", hash)
+}
+
+private func isLockScreen(_ span: ObservedSpan) -> Bool {
+    span.attributes["app.bundle_id"] == "com.apple.loginwindow" || span.attributes["app.name"] == "loginwindow"
 }

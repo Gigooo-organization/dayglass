@@ -436,3 +436,47 @@ private func date(_ value: String) -> Date {
     let formatter = ISO8601DateFormatter()
     return formatter.date(from: value)!
 }
+
+@Suite struct LockScreenTests {
+    private func focus(_ app: String, _ bundle: String, _ start: String, _ end: String) -> ObservedSpan {
+        ObservedSpan(name: "focus", start: lockDate(start), end: lockDate(end), attributes: [
+            "app.name": app, "app.bundle_id": bundle, "url.domain": "example.com",
+        ])
+    }
+
+    private func run(_ start: String, _ end: String) -> ObservedSpan {
+        ObservedSpan(name: "dayglass.run", start: lockDate(start), end: lockDate(end))
+    }
+
+    @Test func lockScreenTimeIsNotWorkAndAShortLockAsksAGapWithSkipFirst() throws {
+        let spans = [
+            focus("Google Chrome", "com.google.Chrome", "2026-10-01T10:00:00Z", "2026-10-01T11:00:00Z"),
+            focus("loginwindow", "com.apple.loginwindow", "2026-10-01T11:00:00Z", "2026-10-01T11:40:00Z"),
+            focus("Google Chrome", "com.google.Chrome", "2026-10-01T11:40:00Z", "2026-10-01T12:10:00Z"),
+            run("2026-10-01T10:00:00Z", "2026-10-01T12:10:00Z"),
+        ]
+        let result = ReportEngine(input: ReportInput(spans: spans)).build()
+
+        #expect(result.time.reduce(0) { $0 + $1.seconds } == 90 * 60)
+        let gap = try #require(result.questions.first { $0.kind == "gap" })
+        #expect(gap.seconds == 40 * 60)
+        #expect(gap.options.first == "skip")
+    }
+
+    @Test func anOvernightLockIsNeitherWorkNorAQuestion() {
+        let spans = [
+            focus("Google Chrome", "com.google.Chrome", "2026-10-01T09:00:00Z", "2026-10-01T10:00:00Z"),
+            focus("loginwindow", "com.apple.loginwindow", "2026-10-01T10:00:00Z", "2026-10-01T19:00:00Z"),
+            focus("Google Chrome", "com.google.Chrome", "2026-10-01T19:00:00Z", "2026-10-01T20:00:00Z"),
+            run("2026-10-01T09:00:00Z", "2026-10-01T20:00:00Z"),
+        ]
+        let result = ReportEngine(input: ReportInput(spans: spans)).build()
+
+        #expect(result.time.reduce(0) { $0 + $1.seconds } == 2 * 3600)
+        #expect(!result.questions.contains { $0.kind == "gap" })
+    }
+}
+
+private func lockDate(_ value: String) -> Date {
+    ISO8601DateFormatter().date(from: value)!
+}
