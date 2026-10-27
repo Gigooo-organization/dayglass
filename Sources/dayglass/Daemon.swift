@@ -320,6 +320,7 @@ final class LocalSinkServer: @unchecked Sendable {
     }
 
     private func receive(_ client: Int32) {
+        setSocketTimeout(client, seconds: 5)
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 8_192)
         while true {

@@ -52,6 +52,7 @@ final class TelemetryServer {
 
     private func handle(_ client: Int32) {
         defer { close(client) }
+        setSocketTimeout(client, seconds: 5)
         do {
             let request = try readRequest(from: client)
             guard request.method == "POST" else {
