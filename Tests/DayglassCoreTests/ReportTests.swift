@@ -505,3 +505,97 @@ private func lockDate(_ value: String) -> Date {
         #expect(category(app: "Aside", bundle: "at.studio.AsideBrowser", domain: "developer.apple.com")! == ("research", "url"))
     }
 }
+
+@Suite struct RepositoryConventionTests {
+    private let midori = ProjectRule(code: "GF", git: ["*github.com/Gigooo-organization/midori-no-mori*"])
+
+    private func browser(_ path: String) -> ObservedSpan {
+        ObservedSpan(name: "focus", start: lockDate("2026-10-01T10:00:00Z"), end: lockDate("2026-10-01T11:00:00Z"), attributes: [
+            "app.name": "Microsoft Edge", "app.bundle_id": "com.microsoft.edgemac", "url.domain": "github.com", "url.path": path,
+        ])
+    }
+
+    private func terminal(_ start: String = "2026-10-01T10:00:00Z", _ end: String = "2026-10-01T11:00:00Z") -> ObservedSpan {
+        ObservedSpan(name: "focus", start: lockDate(start), end: lockDate(end), attributes: ["app.name": "WezTerm", "app.bundle_id": "com.github.wez.wezterm"])
+    }
+
+    private func ai(_ name: String, cwd: String, _ start: String, _ end: String) -> ObservedSpan {
+        ObservedSpan(name: name, start: lockDate(start), end: lockDate(end), attributes: ["dayglass.cwd": cwd])
+    }
+
+    private func projects(_ spans: [ObservedSpan], rules: [ProjectRule] = []) -> [String?] {
+        ReportEngine(input: ReportInput(spans: spans), configuration: ReportConfiguration(projects: rules)).build().time.map(\.project)
+    }
+
+    @Test func anOrganizationRepositoryPageIsItsOwnProject() {
+        #expect(projects([browser("/Gigooo-organization/kintone-plugin/pull/3")]) == ["kintone-plugin"])
+    }
+
+    @Test func aGitRuleAlsoMatchesTheRepositoryPage() {
+        #expect(projects([browser("/Gigooo-organization/midori-no-mori/issues")], rules: [midori]) == ["GF"])
+    }
+
+    @Test func browsingAnOutsideRepositoryStaysUnassigned() {
+        #expect(projects([browser("/apple/swift")]) == [nil])
+    }
+
+    @Test func aSessionCheckoutNamesTheProject() {
+        let session = ai("gen_ai.session", cwd: "/Users/me/dev/github.com/tataeru-com/izumi", "2026-10-01T09:00:00Z", "2026-10-01T12:00:00Z")
+        #expect(projects([terminal(), session]) == ["izumi"])
+    }
+
+    @Test func aWorktreeResolvesToTheRuleForItsRepository() {
+        let session = ai("gen_ai.session", cwd: "/Users/me/.t3/worktrees/midori-no-mori/t3-4cadb6e1", "2026-10-01T09:00:00Z", "2026-10-01T12:00:00Z")
+        #expect(projects([terminal(), session], rules: [midori]) == ["GF"])
+    }
+
+    @Test func theRepositoryWithAnActiveTurnWinsOverIdleOpenSessions() {
+        let spans = [
+            terminal(),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/dayglass", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/twinhome", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+            ai("gen_ai.turn", cwd: "/Users/me/dev/github.com/Gigooo-organization/twinhome", "2026-10-01T10:10:00Z", "2026-10-01T10:20:00Z"),
+        ]
+        #expect(projects(spans) == ["twinhome"])
+    }
+
+    @Test func adjacentAmbiguousBlocksAskOneQuestion() {
+        let spans = [
+            terminal("2026-10-01T10:00:00Z", "2026-10-01T10:30:00Z"),
+            terminal("2026-10-01T10:30:00Z", "2026-10-01T11:00:00Z").withTitle("other tab"),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/dayglass", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/twinhome", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+        ]
+        let questions = ReportEngine(input: ReportInput(spans: spans)).build().questions.filter { $0.kind == "ambiguous_project" }
+        #expect(questions.count == 1)
+        #expect(questions.first?.seconds == 3600)
+    }
+
+    @Test func withoutAnOverlappingTurnTheLatestRecentTurnDecides() {
+        let spans = [
+            terminal(),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/dayglass", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/twinhome", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+            ai("gen_ai.turn", cwd: "/Users/me/dev/github.com/Gigooo-organization/dayglass", "2026-10-01T09:00:00Z", "2026-10-01T09:10:00Z"),
+            ai("gen_ai.turn", cwd: "/Users/me/dev/github.com/Gigooo-organization/twinhome", "2026-10-01T09:40:00Z", "2026-10-01T09:50:00Z"),
+        ]
+        #expect(projects(spans) == ["twinhome"])
+    }
+
+    @Test func aBriefAmbiguousBlockIsNotWorthAQuestion() {
+        let spans = [
+            terminal("2026-10-01T10:00:00Z", "2026-10-01T10:05:00Z"),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/dayglass", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+            ai("gen_ai.session", cwd: "/Users/me/dev/github.com/Gigooo-organization/twinhome", "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z"),
+        ]
+        #expect(!ReportEngine(input: ReportInput(spans: spans)).build().questions.contains { $0.kind == "ambiguous_project" })
+    }
+}
+
+private extension ObservedSpan {
+    func withTitle(_ title: String) -> ObservedSpan {
+        var values = attributes
+        values["window.title"] = title
+        return ObservedSpan(name: name, start: start, end: end, attributes: values)
+    }
+}
