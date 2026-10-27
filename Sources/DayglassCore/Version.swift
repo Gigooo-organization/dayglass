@@ -1,6 +1,6 @@
 public enum DayglassCore {
     public static let version = resolveVersion(release: releaseVersion, gitDescribe: gitDescribe)
-    static let releaseVersion = "0.6.0"
+    static let releaseVersion = "0.6.1"
 }
 
 /// `gitDescribe` is generated at build time by the GitDescribe plugin. It is nil for builds

@@ -12,7 +12,7 @@ enum DaemonError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .accessibilityPermission:
-            return "Accessibility permission required. Grant it in System Settings > Privacy & Security > Accessibility."
+            return "Accessibility permission required. Grant access to ~/.local/libexec/dayglass in System Settings > Privacy & Security > Accessibility. If already enabled, remove that entry and add the current binary again."
         case .socket(let message): return "daemon socket: \(message)"
         }
     }
@@ -37,7 +37,8 @@ final class DayglassDaemon: @unchecked Sendable {
     }
 
     func run() throws {
-        guard AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary) else {
+        // launchd retries failures; prompting here would reopen the dialog on every restart.
+        guard AXIsProcessTrusted() else {
             throw DaemonError.accessibilityPermission
         }
         try socketServer.start()
