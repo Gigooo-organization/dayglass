@@ -94,7 +94,9 @@ public enum CLIHelp {
               dayglass daemon
 
             Observe foreground applications and idle time. macOS Accessibility permission
-            is required. Normally started by the launch agent installed by setup.
+            is required. Grant access to ~/.local/libexec/dayglass in System Settings >
+            Privacy & Security > Accessibility. Permission checks never open a dialog.
+            Normally started by the launch agent installed by setup.
             """
         case "serve":
             return """
